@@ -26,6 +26,10 @@ APK** (no Play Store).
   floating window (local playback; auto-enters on Android 12+).
 - **Now-playing bar** — on a phone, when a channel is playing and you're browsing the list, a bar
   above the navigation lets you jump straight back to the player.
+- **Android TV** — single APK that also appears on the TV (leanback) launcher and is navigable by
+  remote (D-pad focus + select); the Cast button and PiP are disabled on TV. Runs on Android TV
+  8+ (API 26+), e.g. Mi TV 4S (Android 9 / API 28). Remote-focus polish (initial focus, on-screen
+  keyboard for search) is a known rough edge.
 
 ## Tech stack
 

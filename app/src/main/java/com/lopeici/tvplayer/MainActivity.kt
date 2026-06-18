@@ -38,6 +38,10 @@ class MainActivity : AppCompatActivity() {
     /** True when a channel is playing locally (not casting) so it can continue in PiP. */
     private var pipEligible = false
 
+    private val isTelevision: Boolean by lazy {
+        packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -54,7 +58,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 combine(vm.isCasting, vm.currentChannel) { casting, channel ->
-                    channel != null && !casting
+                    channel != null && !casting && !isTelevision
                 }.collect { eligible ->
                     pipEligible = eligible
                     updatePipParams(eligible)
