@@ -9,14 +9,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
@@ -69,7 +76,14 @@ fun PlayerScreen(vm: TvViewModel, onBack: () -> Unit) {
  * a back button); false is the side pane used in the wide / unfolded two-pane layout.
  */
 @Composable
-fun PlayerContent(vm: TvViewModel, fullScreen: Boolean, onBack: (() -> Unit)? = null) {
+fun PlayerContent(
+    vm: TvViewModel,
+    fullScreen: Boolean,
+    onBack: (() -> Unit)? = null,
+    onToggleFullScreen: (() -> Unit)? = null,
+    onToggleList: (() -> Unit)? = null,
+    listVisible: Boolean = true,
+) {
     val current by vm.currentChannel.collectAsStateWithLifecycle()
     val isPlaying by vm.isPlaying.collectAsStateWithLifecycle()
     val isCasting by vm.isCasting.collectAsStateWithLifecycle()
@@ -133,10 +147,12 @@ fun PlayerContent(vm: TvViewModel, fullScreen: Boolean, onBack: (() -> Unit)? = 
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .background(scrim)
+                    .statusBarsPadding()
+                    .displayCutoutPadding()
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (fullScreen && onBack != null) {
+                if (onBack != null) {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
@@ -171,6 +187,24 @@ fun PlayerContent(vm: TvViewModel, fullScreen: Boolean, onBack: (() -> Unit)? = 
                         Text("Casting to TV", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
                     }
                 }
+                if (onToggleList != null) {
+                    IconButton(onClick = onToggleList) {
+                        Icon(
+                            if (listVisible) Icons.AutoMirrored.Filled.MenuOpen else Icons.Filled.Menu,
+                            contentDescription = if (listVisible) "Hide channel list" else "Show channel list",
+                            tint = Color.White,
+                        )
+                    }
+                }
+                if (onToggleFullScreen != null) {
+                    IconButton(onClick = onToggleFullScreen) {
+                        Icon(
+                            if (fullScreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                            contentDescription = if (fullScreen) "Exit full screen" else "Full screen",
+                            tint = Color.White,
+                        )
+                    }
+                }
                 CastButton()
             }
 
@@ -179,6 +213,8 @@ fun PlayerContent(vm: TvViewModel, fullScreen: Boolean, onBack: (() -> Unit)? = 
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(scrim)
+                    .navigationBarsPadding()
+                    .displayCutoutPadding()
                     .padding(8.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,

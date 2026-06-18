@@ -1,4 +1,4 @@
-# tvPlayer
+# KaboomIPTV
 
 A native Android **IPTV player** for Android 16 (API 36). Load M3U playlists, browse and search
 channels, favorite them, watch live TV, and cast to a Chromecast. Distributed as a **sideloaded

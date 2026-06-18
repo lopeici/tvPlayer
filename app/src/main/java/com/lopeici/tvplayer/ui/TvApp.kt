@@ -1,5 +1,6 @@
 package com.lopeici.tvplayer.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.History
@@ -67,7 +69,17 @@ fun TvApp(vm: TvViewModel, onImportFile: () -> Unit) {
 @Composable
 private fun WideLayout(vm: TvViewModel, onImportFile: () -> Unit) {
     var selected by remember { mutableStateOf(Tab.Channels) }
+    var listVisible by remember { mutableStateOf(true) }
+    var playerFullScreen by remember { mutableStateOf(false) }
     val onPlay: (Channel, List<Channel>) -> Unit = { channel, queue -> vm.play(channel, queue) }
+
+    if (playerFullScreen) {
+        BackHandler { playerFullScreen = false }
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            PlayerContent(vm, fullScreen = true, onToggleFullScreen = { playerFullScreen = false })
+        }
+        return
+    }
 
     Row(Modifier.fillMaxSize()) {
         NavigationRail {
@@ -80,17 +92,25 @@ private fun WideLayout(vm: TvViewModel, onImportFile: () -> Unit) {
                 )
             }
         }
-        Box(Modifier.weight(1f).fillMaxHeight()) {
-            when (selected) {
-                Tab.Channels -> ChannelsScreen(vm, onPlay)
-                Tab.Favorites -> FavoritesScreen(vm, onPlay)
-                Tab.Recents -> RecentsScreen(vm, onPlay)
-                Tab.Playlists -> PlaylistsScreen(vm, onImportFile)
+        if (listVisible) {
+            Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding()) {
+                when (selected) {
+                    Tab.Channels -> ChannelsScreen(vm, onPlay)
+                    Tab.Favorites -> FavoritesScreen(vm, onPlay)
+                    Tab.Recents -> RecentsScreen(vm, onPlay)
+                    Tab.Playlists -> PlaylistsScreen(vm, onImportFile)
+                }
             }
+            VerticalDivider()
         }
-        VerticalDivider()
-        Box(Modifier.weight(1.4f).fillMaxHeight().background(Color.Black)) {
-            PlayerContent(vm, fullScreen = false)
+        Box(Modifier.weight(1.6f).fillMaxHeight().background(Color.Black)) {
+            PlayerContent(
+                vm,
+                fullScreen = false,
+                onToggleFullScreen = { playerFullScreen = true },
+                onToggleList = { listVisible = !listVisible },
+                listVisible = listVisible,
+            )
         }
     }
 }
