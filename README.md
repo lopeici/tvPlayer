@@ -164,6 +164,10 @@ Also, casting needs the stream reachable from the Chromecast (HTTPS / correct CO
 limitation of the Cast receiver, not the app; a custom receiver or transcoder would be needed and
 is out of scope.
 
+**Xtream Codes tip:** if your playlist URL contains `output=mpegts` (raw MPEG-TS), the Chromecast
+shows the channel title but the picture stays black. Re-add the playlist with **`output=hls`** (or
+`output=m3u8`) instead — those channels are HLS and cast correctly (and still play on the phone).
+
 Casting can only be tested on a real Chromecast on the same Wi-Fi (not in the emulator).
 
 ## Not in v1 (possible future work)
