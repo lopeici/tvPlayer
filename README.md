@@ -40,6 +40,48 @@ APK** (no Play Store).
   processors, to keep the build simple.
 - AGP 9.0.1, Gradle 9.4.1, Kotlin 2.2.10, JDK 21, `compileSdk`/`targetSdk` 36, `minSdk` 26.
 
+## Compatibility
+
+`minSdk 26` (Android 8.0) → `targetSdk 36` (Android 16). One APK installs on phones, tablets,
+foldables, and Android TV. **Anything below API 26 (Android 7.x and older) cannot install** — the
+EPG/date code uses `java.time`, which requires API 26+.
+
+### Phones / tablets / foldables
+
+| Android | API | Status |
+|---|---|---|
+| 8.0 / 8.1 (Oreo) | 26 / 27 | ✅ Minimum supported |
+| 9 (Pie) | 28 | ✅ Supported |
+| 10 | 29 | ✅ Supported |
+| 11 | 30 | ✅ Supported |
+| 12 / 12L | 31 / 32 | ✅ Supported (PiP auto-enters from here) |
+| 13 | 33 | ✅ Supported |
+| 14 | 34 | ✅ Supported |
+| 15 | 35 | ✅ Supported (edge-to-edge handled) |
+| 16 | 36 | ✅ Target — primary test target |
+| 7.x and older | ≤ 25 | ❌ Won't install (below `minSdk`) |
+
+### Android TV
+
+| Android TV | API | Status |
+|---|---|---|
+| 8.0 (Oreo) | 26 | ✅ Minimum supported |
+| 9 (Pie) | 28 | ✅ Verified on emulator (matches Mi TV 4S) |
+| 10 | 29 | ✅ Supported |
+| 11 | 30 | ✅ Supported |
+| 12 | 31 | ✅ Supported |
+| 13 (Google TV) | 33 | ✅ Supported |
+| 14 | 34 | ✅ Supported |
+| 7.x and older | ≤ 25 | ❌ Won't install (below `minSdk`) |
+
+**Notes**
+- *Verified* = exercised directly (Android 16 phone/foldable emulator; Android TV 9 / API 28). Other
+  versions run the same codebase and are forward-compatible; the version-specific paths (PiP,
+  edge-to-edge on 15+, 16 KB page size on 15+) are handled.
+- **Picture-in-Picture** auto-enters on Android 12+ (API 31+); on Android 8–11 it enters when you
+  leave the app. PiP is disabled on Android TV.
+- On **Android TV** the Cast button is hidden and the UI is driven by the remote (D-pad).
+
 ## Project layout
 
 ```
