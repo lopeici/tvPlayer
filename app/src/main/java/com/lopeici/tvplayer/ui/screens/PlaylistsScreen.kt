@@ -25,6 +25,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +49,7 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
     val activeId by vm.activePlaylistId.collectAsStateWithLifecycle()
     val loading by vm.loading.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
+    val castAsHls by vm.castAsHls.collectAsStateWithLifecycle()
     var showAddUrl by remember { mutableStateOf(false) }
     var epgFor by remember { mutableStateOf<Playlist?>(null) }
 
@@ -63,6 +66,21 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
                 Icon(Icons.Filled.FileOpen, contentDescription = null)
                 Text("Import file")
             }
+        }
+
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Cast in HLS", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Casts each channel's .m3u8 version (needed for Chromecast); local playback is unchanged.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = castAsHls, onCheckedChange = { vm.setCastAsHls(it) })
         }
 
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())

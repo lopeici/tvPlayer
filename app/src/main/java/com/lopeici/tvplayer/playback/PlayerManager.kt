@@ -13,6 +13,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import com.google.android.gms.cast.framework.CastContext
 import com.lopeici.tvplayer.data.Channel
+import com.lopeici.tvplayer.data.hlsVariant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -73,10 +74,10 @@ class PlayerManager(context: Context) {
         })
     }
 
-    fun play(channels: List<Channel>, startIndex: Int) {
+    fun play(channels: List<Channel>, startIndex: Int, castHls: Boolean = false) {
         if (channels.isEmpty()) return
         val idx = startIndex.coerceIn(0, channels.lastIndex)
-        player.setMediaItems(channels.map { it.toMediaItem() }, idx, 0L)
+        player.setMediaItems(channels.map { it.toMediaItem(castHls) }, idx, 0L)
         player.playWhenReady = true
         player.prepare()
     }
@@ -108,10 +109,12 @@ class PlayerManager(context: Context) {
     private fun friendlyError(e: PlaybackException): String =
         "Can't play this channel (${e.errorCodeName}). It may be offline."
 
-    private fun Channel.toMediaItem(): MediaItem {
+    private fun Channel.toMediaItem(castHls: Boolean): MediaItem {
+        // For casting, optionally use the HLS variant (a stock Chromecast can't play raw mpegts).
+        val streamUrl = if (castHls) hlsVariant(url) else url
         // A MIME type is required for Chromecast: the Cast receiver needs a contentType, and
         // Media3's converter would otherwise pass null to MediaInfo (which crashes casting).
-        val path = url.substringBefore('?').lowercase()
+        val path = streamUrl.substringBefore('?').lowercase()
         val mime = when {
             path.endsWith(".m3u8") -> MimeTypes.APPLICATION_M3U8
             path.endsWith(".mpd") -> MimeTypes.APPLICATION_MPD
@@ -121,7 +124,7 @@ class PlayerManager(context: Context) {
             else -> MimeTypes.APPLICATION_M3U8 // most IPTV streams are HLS; a sensible default for casting
         }
         return MediaItem.Builder()
-            .setUri(url)
+            .setUri(streamUrl)
             .setMediaId(key)
             .setMimeType(mime)
             .setMediaMetadata(

@@ -35,6 +35,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     val isPlaying = playerManager.isPlaying
     val isCasting = playerManager.isCasting
     val playerError = playerManager.error
+    val castAsHls = repo.castAsHls
 
     // Ticks roughly every 30s so "now playing" advances over time.
     private val nowTick: StateFlow<Long> = flow {
@@ -91,6 +92,21 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
             nowProg to nextProg
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null to null)
 
+    init {
+        // When casting starts/stops (or the HLS toggle changes) while a channel is open, reload the
+        // current channel so casting uses the HLS variant and local playback uses the original stream.
+        viewModelScope.launch {
+            combine(playerManager.isCasting, repo.castAsHls) { casting, hls -> casting && hls }
+                .collect { useHls ->
+                    val q = queue.value
+                    if (q.isNotEmpty()) {
+                        val idx = q.indexOfFirst { it.key == currentChannel.value?.key }.coerceAtLeast(0)
+                        playerManager.play(q, idx, castHls = useHls)
+                    }
+                }
+        }
+    }
+
     // ---- Actions ----
 
     fun setSearch(value: String) { searchQuery.value = value }
@@ -118,13 +134,14 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearError() { repo.clearError(); playerManager.clearError() }
+    fun setCastAsHls(value: Boolean) = repo.setCastAsHls(value)
 
     /** Play [channel] within [queue] (used for next/previous zapping and channel-number jump). */
     fun play(channel: Channel, withinQueue: List<Channel>) {
         val q = withinQueue.ifEmpty { listOf(channel) }
         queue.value = q
         val idx = q.indexOfFirst { it.key == channel.key }.coerceAtLeast(0)
-        playerManager.play(q, idx)
+        playerManager.play(q, idx, castHls = isCasting.value && repo.castAsHls.value)
         viewModelScope.launch { repo.recordRecent(channel) }
     }
 

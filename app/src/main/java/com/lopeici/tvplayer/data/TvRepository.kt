@@ -66,7 +66,12 @@ class TvRepository(private val context: Context) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    /** When true, cast playback uses each channel's HLS (.m3u8) variant (local playback unchanged). */
+    private val _castAsHls = MutableStateFlow(false)
+    val castAsHls: StateFlow<Boolean> = _castAsHls.asStateFlow()
+
     init {
+        _castAsHls.value = readBoolFile("cast_hls.txt")
         _playlists.value = readJson("playlists.json", ListSerializer(Playlist.serializer()), emptyList())
         _favorites.value = readJson("favorites.json", ListSerializer(String.serializer()), emptyList()).toSet()
         _recents.value = readJson("recents.json", ListSerializer(String.serializer()), emptyList())
@@ -185,6 +190,18 @@ class TvRepository(private val context: Context) {
     }
 
     fun clearError() { _error.value = null }
+
+    fun setCastAsHls(value: Boolean) {
+        _castAsHls.value = value
+        scope.launch { writeBoolFile("cast_hls.txt", value) }
+    }
+
+    private fun readBoolFile(name: String): Boolean =
+        runCatching { File(dir, name).takeIf { it.exists() }?.readText()?.trim() == "true" }.getOrDefault(false)
+
+    private fun writeBoolFile(name: String, value: Boolean) {
+        runCatching { File(dir, name).writeText(value.toString()) }
+    }
 
     // ---- Internals -------------------------------------------------------
 
