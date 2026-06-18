@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PlayerView inflated with a TextureView surface. TextureView composites within the view
+  hierarchy, which renders correctly on the Android emulator (a SurfaceView overlay often
+  shows up green/garbled there). Fine for non-DRM IPTV; on real devices SurfaceView would be
+  marginally more efficient but this app plays no secure/DRM content.
+-->
+<androidx.media3.ui.PlayerView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black"
+    app:surface_type="texture_view"
+    app:use_controller="false"
+    app:resize_mode="fit"
+    app:keep_content_on_player_reset="true"
+    app:shutter_background_color="@android:color/black" />
