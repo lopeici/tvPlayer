@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -127,15 +128,15 @@ fun PlayerContent(
             CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
         }
 
-        if (error != null) {
+        if (error != null || playbackState == Player.STATE_ENDED) {
             Column(
                 Modifier.align(Alignment.Center).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(error!!, color = Color.White)
+                Text(error ?: "This channel stopped transmitting.", color = Color.White)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { vm.retry() }) { Text("Retry") }
+                    TextButton(onClick = { vm.retry() }) { Text("Refresh") }
                     TextButton(onClick = { vm.zapNext() }) { Text("Next channel") }
                 }
             }
@@ -231,6 +232,9 @@ fun PlayerContent(
                 }
                 IconButton(onClick = { vm.zapNext() }) {
                     Icon(Icons.Filled.SkipNext, contentDescription = "Next channel", tint = Color.White)
+                }
+                IconButton(onClick = { vm.retry() }) {
+                    Icon(Icons.Filled.Refresh, contentDescription = "Refresh channel", tint = Color.White)
                 }
                 IconButton(onClick = { showGuide = true }) {
                     Icon(Icons.Filled.Schedule, contentDescription = "TV guide", tint = Color.White)

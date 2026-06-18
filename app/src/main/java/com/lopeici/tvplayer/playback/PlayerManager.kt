@@ -6,6 +6,7 @@ import androidx.media3.cast.CastPlayer
 import androidx.media3.common.DeviceInfo
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -107,16 +108,29 @@ class PlayerManager(context: Context) {
     private fun friendlyError(e: PlaybackException): String =
         "Can't play this channel (${e.errorCodeName}). It may be offline."
 
-    private fun Channel.toMediaItem(): MediaItem =
-        MediaItem.Builder()
+    private fun Channel.toMediaItem(): MediaItem {
+        // A MIME type is required for Chromecast: the Cast receiver needs a contentType, and
+        // Media3's converter would otherwise pass null to MediaInfo (which crashes casting).
+        val path = url.substringBefore('?').lowercase()
+        val mime = when {
+            path.endsWith(".m3u8") -> MimeTypes.APPLICATION_M3U8
+            path.endsWith(".mpd") -> MimeTypes.APPLICATION_MPD
+            path.endsWith(".ts") -> MimeTypes.VIDEO_MP2T
+            path.endsWith(".mp4") -> MimeTypes.VIDEO_MP4
+            path.endsWith(".mkv") -> MimeTypes.VIDEO_MATROSKA
+            else -> MimeTypes.APPLICATION_M3U8 // most IPTV streams are HLS; a sensible default for casting
+        }
+        return MediaItem.Builder()
             .setUri(url)
             .setMediaId(key)
+            .setMimeType(mime)
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(name)
                     .setStation(group)
                     .apply { logo?.let { setArtworkUri(it.toUri()) } }
-                    .build()
+                    .build(),
             )
             .build()
+    }
 }
