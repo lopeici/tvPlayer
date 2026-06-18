@@ -1,0 +1,122 @@
+package com.lopeici.tvplayer.playback
+
+import android.content.Context
+import androidx.core.net.toUri
+import androidx.media3.cast.CastPlayer
+import androidx.media3.common.DeviceInfo
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.ExoPlayer
+import com.google.android.gms.cast.framework.CastContext
+import com.lopeici.tvplayer.data.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/**
+ * Owns a single ExoPlayer (local) wrapped by a CastPlayer that transparently routes playback to a
+ * connected Chromecast and back to the local player on disconnect. Because the Chromecast streams
+ * directly, casting keeps playing when the app is minimized.
+ */
+class PlayerManager(context: Context) {
+
+    private val loadControl = DefaultLoadControl.Builder()
+        // Tuned for live IPTV: small buffers so channel switching feels fast.
+        .setBufferDurationsMs(2_000, 20_000, 1_000, 2_000)
+        .build()
+
+    private val exoPlayer: ExoPlayer = ExoPlayer.Builder(context)
+        .setLoadControl(loadControl)
+        .setHandleAudioBecomingNoisy(true)
+        .build()
+
+    /** The player the UI binds to. CastPlayer auto-switches between local and remote. */
+    val player: Player = runCatching {
+        CastContext.getSharedInstance(context.applicationContext)
+        CastPlayer.Builder(context.applicationContext).setLocalPlayer(exoPlayer).build() as Player
+    }.getOrDefault(exoPlayer)
+
+    private val _isPlaying = MutableStateFlow(false)
+    val isPlaying = _isPlaying.asStateFlow()
+
+    private val _playbackState = MutableStateFlow(Player.STATE_IDLE)
+    val playbackState = _playbackState.asStateFlow()
+
+    private val _currentMediaId = MutableStateFlow<String?>(null)
+    val currentMediaId = _currentMediaId.asStateFlow()
+
+    private val _isCasting = MutableStateFlow(false)
+    val isCasting = _isCasting.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error = _error.asStateFlow()
+
+    init {
+        player.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) { _isPlaying.value = isPlaying }
+            override fun onPlaybackStateChanged(playbackState: Int) { _playbackState.value = playbackState }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                _currentMediaId.value = mediaItem?.mediaId
+            }
+            override fun onDeviceInfoChanged(deviceInfo: DeviceInfo) {
+                _isCasting.value = deviceInfo.playbackType == DeviceInfo.PLAYBACK_TYPE_REMOTE
+            }
+            override fun onPlayerError(error: PlaybackException) {
+                _error.value = friendlyError(error)
+            }
+            override fun onPlayerErrorChanged(error: PlaybackException?) {
+                if (error == null) _error.value = null
+            }
+        })
+    }
+
+    fun play(channels: List<Channel>, startIndex: Int) {
+        if (channels.isEmpty()) return
+        val idx = startIndex.coerceIn(0, channels.lastIndex)
+        player.setMediaItems(channels.map { it.toMediaItem() }, idx, 0L)
+        player.playWhenReady = true
+        player.prepare()
+    }
+
+    fun playIndex(index: Int) {
+        if (index in 0 until player.mediaItemCount) {
+            player.seekTo(index, 0L)
+            player.playWhenReady = true
+        }
+    }
+
+    fun next() = player.run { if (hasNextMediaItem()) seekToNextMediaItem() }
+    fun previous() = player.run { if (hasPreviousMediaItem()) seekToPreviousMediaItem() }
+    fun togglePlayPause() = player.run { if (isPlaying) pause() else play() }
+
+    fun retry() {
+        _error.value = null
+        player.prepare()
+        player.play()
+    }
+
+    fun clearError() { _error.value = null }
+
+    fun release() {
+        if (player !== exoPlayer) player.release()
+        exoPlayer.release()
+    }
+
+    private fun friendlyError(e: PlaybackException): String =
+        "Can't play this channel (${e.errorCodeName}). It may be offline."
+
+    private fun Channel.toMediaItem(): MediaItem =
+        MediaItem.Builder()
+            .setUri(url)
+            .setMediaId(key)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(name)
+                    .setStation(group)
+                    .apply { logo?.let { setArtworkUri(it.toUri()) } }
+                    .build()
+            )
+            .build()
+}
