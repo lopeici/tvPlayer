@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,7 +37,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lopeici.tvplayer.data.Channel
+import com.lopeici.tvplayer.ui.components.MiniPlayer
+import com.lopeici.tvplayer.ui.components.PlayerSurface
 import com.lopeici.tvplayer.ui.screens.ChannelsScreen
 import com.lopeici.tvplayer.ui.screens.FavoritesScreen
 import com.lopeici.tvplayer.ui.screens.PlayerContent
@@ -55,7 +59,14 @@ private const val ROUTE_PLAYER = "player"
 
 /** Switches between the phone (compact) layout and a two-pane layout on wide / unfolded screens. */
 @Composable
-fun TvApp(vm: TvViewModel, onImportFile: () -> Unit) {
+fun TvApp(vm: TvViewModel, isInPip: Boolean = false, onImportFile: () -> Unit) {
+    if (isInPip) {
+        // In Picture-in-Picture, show only the video surface (no list/controls).
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            PlayerSurface(vm.playerManager.player, Modifier.fillMaxSize())
+        }
+        return
+    }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         if (maxWidth >= 720.dp) {
             WideLayout(vm, onImportFile)
@@ -123,23 +134,39 @@ private fun CompactLayout(vm: TvViewModel, onImportFile: () -> Unit) {
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = Tab.entries.any { it.route == currentRoute }
 
+    val currentChannel by vm.currentChannel.collectAsStateWithLifecycle()
+    val isPlaying by vm.isPlaying.collectAsStateWithLifecycle()
+    val nowNext by vm.currentNowNext.collectAsStateWithLifecycle()
+
     Scaffold(
         bottomBar = {
-            if (showBottomBar) {
-                NavigationBar {
-                    Tab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = currentRoute == tab.route,
-                            onClick = {
-                                navController.navigate(tab.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = { Text(tab.label) },
-                        )
+            Column {
+                val playing = currentChannel
+                if (playing != null && currentRoute != ROUTE_PLAYER) {
+                    MiniPlayer(
+                        channel = playing,
+                        nowTitle = nowNext.first?.title,
+                        isPlaying = isPlaying,
+                        onPlayPause = { vm.togglePlayPause() },
+                        onClick = { navController.navigate(ROUTE_PLAYER) { launchSingleTop = true } },
+                    )
+                }
+                if (showBottomBar) {
+                    NavigationBar {
+                        Tab.entries.forEach { tab ->
+                            NavigationBarItem(
+                                selected = currentRoute == tab.route,
+                                onClick = {
+                                    navController.navigate(tab.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                },
+                                icon = { Icon(tab.icon, contentDescription = tab.label) },
+                                label = { Text(tab.label) },
+                            )
+                        }
                     }
                 }
             }

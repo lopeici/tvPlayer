@@ -19,8 +19,13 @@ APK** (no Play Store).
 - **Chromecast** — cast the current channel to a Cast device. Because the Chromecast streams
   directly, **casting continues when you minimize the app**.
 - **Foldables & tablets** — adaptive layout: on a wide/unfolded screen the channel list and
-  player appear side-by-side with a navigation rail; on a phone (or folded) it's the single-pane
-  layout. Folding/unfolding does not restart the app or interrupt playback.
+  player appear side-by-side with a navigation rail (with full-screen and list-collapse buttons);
+  on a phone (or folded) it's the single-pane layout. Folding/unfolding does not restart the app
+  or interrupt playback.
+- **Picture-in-Picture** — leaving the app while a channel is open keeps the video playing in a
+  floating window (local playback; auto-enters on Android 12+).
+- **Now-playing bar** — on a phone, when a channel is playing and you're browsing the list, a bar
+  above the navigation lets you jump straight back to the player.
 
 ## Tech stack
 
@@ -117,5 +122,4 @@ Casting can only be tested on a real Chromecast on the same Wi-Fi (not in the em
 
 - A full timeline/grid EPG view (current EPG shows now/next + per-channel schedule).
 - A foreground `MediaSessionService` with a media notification and lock-screen controls.
-- Picture-in-Picture for local playback.
 - Parental PIN lock, sleep timer.
