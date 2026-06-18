@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -47,6 +48,7 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
     val loading by vm.loading.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     var showAddUrl by remember { mutableStateOf(false) }
+    var epgFor by remember { mutableStateOf<Playlist?>(null) }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -87,6 +89,7 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
                         isActive = playlist.id == activeId,
                         onActivate = { vm.setActivePlaylist(playlist.id) },
                         onRefresh = { vm.refreshPlaylist(playlist.id) },
+                        onSetEpg = { epgFor = playlist },
                         onDelete = { vm.deletePlaylist(playlist.id) },
                     )
                 }
@@ -96,11 +99,20 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
 
     if (showAddUrl) {
         AddUrlDialog(
-            onConfirm = { name, url ->
-                vm.addUrlPlaylist(name, url)
+            onConfirm = { name, url, epgUrl ->
+                vm.addUrlPlaylist(name, url, epgUrl)
                 showAddUrl = false
             },
             onDismiss = { showAddUrl = false },
+        )
+    }
+
+    epgFor?.let { playlist ->
+        EpgUrlDialog(
+            playlist = playlist,
+            onSave = { epgUrl -> vm.setEpgUrl(playlist.id, epgUrl); epgFor = null },
+            onRefresh = { vm.refreshEpg(playlist.id); epgFor = null },
+            onDismiss = { epgFor = null },
         )
     }
 }
@@ -111,14 +123,24 @@ private fun PlaylistRow(
     isActive: Boolean,
     onActivate: () -> Unit,
     onRefresh: () -> Unit,
+    onSetEpg: () -> Unit,
     onDelete: () -> Unit,
 ) {
     ListItem(
         modifier = Modifier.fillMaxWidth(),
         headlineContent = { Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
-            val label = if (playlist.source == PlaylistSource.URL) playlist.uri else "Local file"
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column {
+                val label = if (playlist.source == PlaylistSource.URL) playlist.uri else "Local file"
+                Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (playlist.epgUrl != null) {
+                    Text(
+                        "Guide enabled",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
         },
         leadingContent = {
             IconButton(onClick = onActivate) {
@@ -131,6 +153,13 @@ private fun PlaylistRow(
         },
         trailingContent = {
             Row {
+                IconButton(onClick = onSetEpg) {
+                    Icon(
+                        Icons.Filled.Schedule,
+                        contentDescription = "EPG / guide",
+                        tint = if (playlist.epgUrl != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 IconButton(onClick = onRefresh) { Icon(Icons.Filled.Refresh, contentDescription = "Refresh") }
                 IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "Delete") }
             }
@@ -139,9 +168,10 @@ private fun PlaylistRow(
 }
 
 @Composable
-private fun AddUrlDialog(onConfirm: (String, String) -> Unit, onDismiss: () -> Unit) {
+private fun AddUrlDialog(onConfirm: (String, String, String?) -> Unit, onDismiss: () -> Unit) {
     var name by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
+    var epgUrl by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -163,12 +193,63 @@ private fun AddUrlDialog(onConfirm: (String, String) -> Unit, onDismiss: () -> U
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                OutlinedTextField(
+                    value = epgUrl,
+                    onValueChange = { epgUrl = it },
+                    label = { Text("EPG / XMLTV URL (optional)") },
+                    placeholder = { Text("http://...xmltv.xml") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(name.trim(), url.trim()) }, enabled = url.isNotBlank()) {
-                Text("Add")
+            TextButton(
+                onClick = { onConfirm(name.trim(), url.trim(), epgUrl.trim().ifBlank { null }) },
+                enabled = url.isNotBlank(),
+            ) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun EpgUrlDialog(
+    playlist: Playlist,
+    onSave: (String?) -> Unit,
+    onRefresh: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var epgUrl by remember { mutableStateOf(playlist.epgUrl.orEmpty()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("EPG for ${playlist.name}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Paste an XMLTV guide URL. Channels are matched to the guide by their tvg-id.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = epgUrl,
+                    onValueChange = { epgUrl = it },
+                    label = { Text("XMLTV URL") },
+                    placeholder = { Text("http://...xmltv.xml(.gz)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (playlist.epgUrl != null) {
+                    TextButton(onClick = onRefresh) {
+                        Icon(Icons.Filled.Refresh, contentDescription = null)
+                        Text("Refresh guide now")
+                    }
+                }
             }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(epgUrl.trim().ifBlank { null }) }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

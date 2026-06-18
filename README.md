@@ -10,6 +10,9 @@ APK** (no Play Store).
   playlists and switch between them; refresh on demand.
 - **Channels** — grouped by category, with logos, **search/filter**, and **favorites**.
 - **Recently watched** — quick access to channels you've played.
+- **Program guide (EPG)** — optional XMLTV guide URL per playlist, matched to channels by `tvg-id`:
+  now-playing with a progress bar on the channel list, now/next on the player, and a per-channel
+  schedule sheet. Guides are parsed (gzip supported) and cached.
 - **Player** — full-screen immersive playback, keep-screen-on, HLS support, buffering and
   dead-channel error handling with retry.
 - **Channel zapping** — next/previous channel and a channel-number jump (like a TV remote).
@@ -109,7 +112,7 @@ Casting can only be tested on a real Chromecast on the same Wi-Fi (not in the em
 
 ## Not in v1 (possible future work)
 
-- EPG / XMLTV program guide.
+- A full timeline/grid EPG view (current EPG shows now/next + per-channel schedule).
 - A foreground `MediaSessionService` with a media notification and lock-screen controls.
 - Picture-in-Picture for local playback.
 - Parental PIN lock, sleep timer.

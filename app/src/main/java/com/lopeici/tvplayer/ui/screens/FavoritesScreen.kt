@@ -17,6 +17,7 @@ import com.lopeici.tvplayer.ui.components.EmptyState
 fun FavoritesScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
     val favoriteChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
     val currentChannel by vm.currentChannel.collectAsStateWithLifecycle()
+    val currentProgrammes by vm.currentProgrammes.collectAsStateWithLifecycle()
 
     if (favoriteChannels.isEmpty()) {
         EmptyState("No favorites yet", "Tap the heart on any channel to add it here.")
@@ -27,6 +28,7 @@ fun FavoritesScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
                     channel = channel,
                     isFavorite = true,
                     isPlaying = channel.key == currentChannel?.key,
+                    currentProgramme = channel.tvgId?.let { currentProgrammes[it] },
                     onClick = { onPlay(channel, favoriteChannels) },
                     onToggleFavorite = { vm.toggleFavorite(channel) },
                 )

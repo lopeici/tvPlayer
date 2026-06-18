@@ -3,7 +3,10 @@ package com.lopeici.tvplayer.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -12,6 +15,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -24,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.lopeici.tvplayer.data.Channel
+import com.lopeici.tvplayer.data.Programme
 
 @Composable
 fun ChannelRow(
@@ -33,7 +38,9 @@ fun ChannelRow(
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier,
+    currentProgramme: Programme? = null,
 ) {
+    val subtitle = currentProgramme?.title ?: channel.group
     ListItem(
         modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
         headlineContent = {
@@ -44,8 +51,18 @@ fun ChannelRow(
                 color = if (isPlaying) MaterialTheme.colorScheme.primary else Color.Unspecified,
             )
         },
-        supportingContent = channel.group?.let { group ->
-            { Text(group, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        supportingContent = subtitle?.let {
+            {
+                Column {
+                    Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                    if (currentProgramme != null) {
+                        LinearProgressIndicator(
+                            progress = { currentProgramme.progress(System.currentTimeMillis()) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, end = 8.dp).height(3.dp),
+                        )
+                    }
+                }
+            }
         },
         leadingContent = { ChannelLogo(channel.logo) },
         trailingContent = {

@@ -10,19 +10,26 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -47,6 +55,8 @@ import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.CastButton
 import com.lopeici.tvplayer.ui.components.PlayerSurface
 import com.lopeici.tvplayer.ui.components.findActivity
+import com.lopeici.tvplayer.ui.components.formatClock
+import com.lopeici.tvplayer.ui.components.timeRange
 
 @Composable
 fun PlayerScreen(vm: TvViewModel, onBack: () -> Unit) {
@@ -55,9 +65,13 @@ fun PlayerScreen(vm: TvViewModel, onBack: () -> Unit) {
     val isCasting by vm.isCasting.collectAsStateWithLifecycle()
     val playbackState by vm.playerManager.playbackState.collectAsStateWithLifecycle()
     val error by vm.playerError.collectAsStateWithLifecycle()
+    val nowNext by vm.currentNowNext.collectAsStateWithLifecycle()
+    val nowProg = nowNext.first
+    val nextProg = nowNext.second
 
     var controlsVisible by remember { mutableStateOf(true) }
     var showJump by remember { mutableStateOf(false) }
+    var showGuide by remember { mutableStateOf(false) }
     val scrim = Color.Black.copy(alpha = 0.45f)
 
     KeepScreenOnImmersive()
@@ -104,9 +118,33 @@ fun PlayerScreen(vm: TvViewModel, onBack: () -> Unit) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                    Text(current?.name ?: "—", color = Color.White, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                    Text(
+                        current?.name ?: "—",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    nowProg?.let {
+                        Text(
+                            "Now · ${it.title}",
+                            color = Color.White.copy(alpha = 0.85f),
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    nextProg?.let {
+                        Text(
+                            "Next · ${formatClock(it.start)}  ${it.title}",
+                            color = Color.White.copy(alpha = 0.6f),
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     if (isCasting) {
-                        Text("Casting to TV", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                        Text("Casting to TV", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
                     }
                 }
                 CastButton()
@@ -134,6 +172,9 @@ fun PlayerScreen(vm: TvViewModel, onBack: () -> Unit) {
                 IconButton(onClick = { vm.zapNext() }) {
                     Icon(Icons.Filled.SkipNext, contentDescription = "Next channel", tint = Color.White)
                 }
+                IconButton(onClick = { showGuide = true }) {
+                    Icon(Icons.Filled.Schedule, contentDescription = "TV guide", tint = Color.White)
+                }
                 IconButton(onClick = { showJump = true }) {
                     Icon(Icons.Filled.Dialpad, contentDescription = "Go to channel number", tint = Color.White)
                 }
@@ -146,6 +187,38 @@ fun PlayerScreen(vm: TvViewModel, onBack: () -> Unit) {
             onConfirm = { number -> vm.jumpToNumber(number); showJump = false },
             onDismiss = { showJump = false },
         )
+    }
+
+    if (showGuide) {
+        val schedule = remember(current?.key) { vm.scheduleFor(current?.tvgId) }
+        ModalBottomSheet(onDismissRequest = { showGuide = false }) {
+            Text(
+                text = current?.name ?: "TV guide",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            if (schedule.isEmpty()) {
+                Text(
+                    "No guide available for this channel.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp),
+                )
+            } else {
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
+                    items(schedule) { p ->
+                        ListItem(
+                            overlineContent = { Text(p.timeRange()) },
+                            headlineContent = { Text(p.title) },
+                            supportingContent = p.desc?.let {
+                                { Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+                            },
+                        )
+                        HorizontalDivider()
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -18,6 +18,7 @@ fun RecentsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
     val recentChannels by vm.recentChannels.collectAsStateWithLifecycle()
     val favorites by vm.favorites.collectAsStateWithLifecycle()
     val currentChannel by vm.currentChannel.collectAsStateWithLifecycle()
+    val currentProgrammes by vm.currentProgrammes.collectAsStateWithLifecycle()
 
     if (recentChannels.isEmpty()) {
         EmptyState("Nothing watched yet", "Channels you play will show up here.")
@@ -28,6 +29,7 @@ fun RecentsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
                     channel = channel,
                     isFavorite = channel.key in favorites,
                     isPlaying = channel.key == currentChannel?.key,
+                    currentProgramme = channel.tvgId?.let { currentProgrammes[it] },
                     onClick = { onPlay(channel, recentChannels) },
                     onToggleFavorite = { vm.toggleFavorite(channel) },
                 )

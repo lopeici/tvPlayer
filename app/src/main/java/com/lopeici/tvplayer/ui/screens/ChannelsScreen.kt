@@ -36,6 +36,7 @@ fun ChannelsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
     val favorites by vm.favorites.collectAsStateWithLifecycle()
     val loading by vm.loading.collectAsStateWithLifecycle()
     val currentChannel by vm.currentChannel.collectAsStateWithLifecycle()
+    val currentProgrammes by vm.currentProgrammes.collectAsStateWithLifecycle()
 
     Column(Modifier.fillMaxSize()) {
         OutlinedTextField(
@@ -81,6 +82,7 @@ fun ChannelsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
                         channel = channel,
                         isFavorite = channel.key in favorites,
                         isPlaying = channel.key == currentChannel?.key,
+                        currentProgramme = channel.tvgId?.let { currentProgrammes[it] },
                         onClick = { onPlay(channel, visible) },
                         onToggleFavorite = { vm.toggleFavorite(channel) },
                     )

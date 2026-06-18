@@ -14,6 +14,8 @@ data class Playlist(
     val source: PlaylistSource,
     /** http(s) URL for [PlaylistSource.URL], or a content:// uri string for [PlaylistSource.FILE]. */
     val uri: String,
+    /** Optional XMLTV (EPG) guide URL for this playlist. */
+    val epgUrl: String? = null,
     val addedAt: Long = 0L,
 )
 

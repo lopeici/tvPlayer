@@ -20,9 +20,10 @@ import okhttp3.Request
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPInputStream
 
 /**
- * Single source of truth for playlists, channels, favorites and recents.
+ * Single source of truth for playlists, channels, favorites, recents and EPG.
  * Persists to small JSON files in [Context.getFilesDir] (no Room / annotation processors).
  */
 class TvRepository(private val context: Context) {
@@ -33,8 +34,12 @@ class TvRepository(private val context: Context) {
 
     private val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .build()
+
+    private val epgFreshnessMs = 3 * 60 * 60 * 1000L      // re-fetch guide if older than 3h
+    private val epgWindowPastMs = 3 * 60 * 60 * 1000L     // keep programmes from 3h ago...
+    private val epgWindowFutureMs = 48 * 60 * 60 * 1000L  // ...to 48h ahead
 
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
@@ -51,6 +56,10 @@ class TvRepository(private val context: Context) {
     private val _recents = MutableStateFlow<List<String>>(emptyList())
     val recents: StateFlow<List<String>> = _recents.asStateFlow()
 
+    /** EPG programmes for the active playlist, keyed by XMLTV channel id (matched to Channel.tvgId). */
+    private val _epg = MutableStateFlow<Map<String, List<Programme>>>(emptyMap())
+    val epg: StateFlow<Map<String, List<Programme>>> = _epg.asStateFlow()
+
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
@@ -63,18 +72,28 @@ class TvRepository(private val context: Context) {
         _recents.value = readJson("recents.json", ListSerializer(String.serializer()), emptyList())
         val active = readActiveId()?.takeIf { id -> _playlists.value.any { it.id == id } }
         _activePlaylistId.value = active
-        if (active != null) scope.launch { _channels.value = readChannels(active) }
+        if (active != null) scope.launch {
+            _channels.value = readChannels(active)
+            _playlists.value.firstOrNull { it.id == active }?.let { if (it.epgUrl != null) loadEpg(it) }
+        }
     }
 
     // ---- Playlists -------------------------------------------------------
 
-    suspend fun addUrlPlaylist(name: String, url: String) = guarded {
+    suspend fun addUrlPlaylist(name: String, url: String, epgUrl: String?) = guarded {
         val id = UUID.randomUUID().toString()
         val text = fetchUrl(url.trim())
         val parsed = M3uParser.parse(text, id)
         require(parsed.isNotEmpty()) { "No channels found in that playlist." }
         writeChannels(id, parsed)
-        val pl = Playlist(id, name.ifBlank { hostOf(url) }, PlaylistSource.URL, url.trim(), now())
+        val pl = Playlist(
+            id = id,
+            name = name.ifBlank { hostOf(url) },
+            source = PlaylistSource.URL,
+            uri = url.trim(),
+            epgUrl = epgUrl?.trim()?.ifBlank { null },
+            addedAt = now(),
+        )
         _playlists.update { it + pl }
         persistPlaylists()
         activate(id, parsed)
@@ -86,7 +105,7 @@ class TvRepository(private val context: Context) {
         val parsed = M3uParser.parse(text, id)
         require(parsed.isNotEmpty()) { "No channels found in that file." }
         writeChannels(id, parsed)
-        val pl = Playlist(id, name.ifBlank { "Imported playlist" }, PlaylistSource.FILE, contentUri, now())
+        val pl = Playlist(id, name.ifBlank { "Imported playlist" }, PlaylistSource.FILE, contentUri, null, now())
         _playlists.update { it + pl }
         persistPlaylists()
         activate(id, parsed)
@@ -106,18 +125,52 @@ class TvRepository(private val context: Context) {
         require(parsed.isNotEmpty()) { "Playlist is empty after refresh." }
         writeChannels(id, parsed)
         if (_activePlaylistId.value == id) _channels.value = parsed
+        if (pl.epgUrl != null && _activePlaylistId.value == id) {
+            File(dir, "epg_$id.json").delete()
+            loadEpg(pl)
+        }
     }
 
     suspend fun deletePlaylist(id: String) = withContext(Dispatchers.IO) {
         _playlists.update { list -> list.filterNot { it.id == id } }
         persistPlaylists()
         File(dir, "channels_$id.json").delete()
+        File(dir, "epg_$id.json").delete()
         if (_activePlaylistId.value == id) {
             val next = _playlists.value.firstOrNull()
-            if (next != null) activate(next.id, readChannels(next.id))
-            else { _activePlaylistId.value = null; writeActiveId(null); _channels.value = emptyList() }
+            if (next != null) {
+                activate(next.id, readChannels(next.id))
+            } else {
+                _activePlaylistId.value = null; writeActiveId(null)
+                _channels.value = emptyList(); _epg.value = emptyMap()
+            }
         }
     }
+
+    // ---- EPG -------------------------------------------------------------
+
+    suspend fun setEpgUrl(id: String, epgUrl: String?) = guarded {
+        val pl = _playlists.value.firstOrNull { it.id == id } ?: return@guarded
+        val updated = pl.copy(epgUrl = epgUrl?.trim()?.ifBlank { null })
+        _playlists.update { list -> list.map { if (it.id == id) updated else it } }
+        persistPlaylists()
+        File(dir, "epg_$id.json").delete()
+        if (_activePlaylistId.value == id) {
+            _epg.value = emptyMap()
+            if (updated.epgUrl != null) loadEpg(updated)
+        }
+    }
+
+    suspend fun refreshEpg(id: String) = guarded {
+        val pl = _playlists.value.firstOrNull { it.id == id } ?: return@guarded
+        if (pl.epgUrl == null) error("This playlist has no EPG URL.")
+        File(dir, "epg_$id.json").delete()
+        loadEpg(pl)
+    }
+
+    /** Programmes for a channel's tvg-id, sorted by start time. */
+    fun scheduleFor(tvgId: String?): List<Programme> =
+        if (tvgId.isNullOrBlank()) emptyList() else _epg.value[tvgId].orEmpty()
 
     // ---- Favorites / recents --------------------------------------------
 
@@ -139,6 +192,38 @@ class TvRepository(private val context: Context) {
         _activePlaylistId.value = id
         writeActiveId(id)
         _channels.value = channels
+        _epg.value = emptyMap()
+        val pl = _playlists.value.firstOrNull { it.id == id }
+        if (pl?.epgUrl != null) scope.launch { loadEpg(pl) }
+    }
+
+    /** Loads EPG from cache when fresh, otherwise fetches + parses. Failures are non-fatal. */
+    private fun loadEpg(pl: Playlist) {
+        val epgUrl = pl.epgUrl ?: return
+        val cache = readEpgCache(pl.id)
+        if (cache != null && (now() - cache.fetchedAt) < epgFreshnessMs) {
+            if (_activePlaylistId.value == pl.id) _epg.value = cache.programmes
+            return
+        }
+        runCatching { fetchAndParseEpg(epgUrl) }
+            .onSuccess { parsed ->
+                writeJson("epg_${pl.id}.json", EpgCache.serializer(), EpgCache(now(), parsed))
+                if (_activePlaylistId.value == pl.id) _epg.value = parsed
+            }
+            .onFailure {
+                if (cache != null && _activePlaylistId.value == pl.id) _epg.value = cache.programmes
+            }
+    }
+
+    private fun fetchAndParseEpg(url: String): Map<String, List<Programme>> {
+        val request = Request.Builder().url(url).header("User-Agent", "tvPlayer/1.0").build()
+        http.newCall(request).execute().use { resp ->
+            if (!resp.isSuccessful) error("EPG server returned HTTP ${resp.code}")
+            val body = resp.body ?: error("Empty EPG response")
+            val stream = if (url.endsWith(".gz", ignoreCase = true)) GZIPInputStream(body.byteStream()) else body.byteStream()
+            val nowMs = now()
+            return stream.use { XmltvParser.parse(it, nowMs - epgWindowPastMs, nowMs + epgWindowFutureMs) }
+        }
     }
 
     private suspend fun guarded(block: suspend () -> Unit) {
@@ -172,6 +257,10 @@ class TvRepository(private val context: Context) {
 
     private fun readChannels(id: String): List<Channel> =
         readJson("channels_$id.json", ListSerializer(Channel.serializer()), emptyList())
+
+    private fun readEpgCache(id: String): EpgCache? = runCatching {
+        File(dir, "epg_$id.json").takeIf { it.exists() }?.let { json.decodeFromString(EpgCache.serializer(), it.readText()) }
+    }.getOrNull()
 
     private fun persistPlaylists() =
         writeJson("playlists.json", ListSerializer(Playlist.serializer()), _playlists.value)
