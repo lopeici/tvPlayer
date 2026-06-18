@@ -55,14 +55,15 @@ app/src/test/...            M3uParser unit tests
 
 ## Building the APK
 
-> **Important — non-ASCII username workaround.** This account name contains a non-ASCII
-> character, which makes the JVM's default temp dir break Gradle's loopback selector
-> (`Unable to establish loopback connection`). Builds therefore force an **ASCII** `java.io.tmpdir`
-> (`D:\tmp`). The project's `gradle.properties` does this for the Gradle daemon; the
-> **`build.ps1`** wrapper does it for the Gradle launcher too. Always build with `build.ps1` from a
-> plain terminal (or use Android Studio — see below).
+> **Important — non-ASCII username workaround (Windows).** If the Windows username contains a
+> non-ASCII character, the JVM's default temp dir breaks Gradle's loopback selector
+> (`Unable to establish loopback connection`). Builds therefore force an **ASCII** `java.io.tmpdir`.
+> The project's `gradle.properties` does this for the Gradle daemon and the **`build.ps1`** wrapper
+> does it for the Gradle launcher too — so always build with `build.ps1` from a plain terminal (or
+> use Android Studio — see below). Set the temp path in those two files to an ASCII path on your
+> machine.
 
-From the project root (`C:\Andre\01-Work\08-IPTV`):
+From the project root:
 
 ```powershell
 # Debug build
@@ -89,26 +90,27 @@ Release builds are signed with `tvplayer-release.jks` using credentials in `keys
 1. Enable **Install unknown apps** for your file manager/browser in Android settings.
 2. Copy `app-release.apk` to the phone and tap it, **or** with USB debugging:
    ```powershell
-   D:\Android\Sdk\platform-tools\adb.exe install -r app-release.apk
+   adb install -r app-release.apk
    ```
 
 ## Opening in Android Studio
 
-Android Studio is installed at `D:\Android\AndroidStudio`. Open `C:\Andre\01-Work\08-IPTV` as a project; it will
-use the SDK at `D:\Android\Sdk`.
+Open the project folder in Android Studio. It uses the SDK path from `local.properties`
+(git-ignored; created automatically by Android Studio, or by `sdkmanager`).
 
-> If Gradle sync fails with `Unable to establish loopback connection`, add this line via
-> **Help ▸ Edit Custom VM Options** and restart:
+> If Gradle sync fails with `Unable to establish loopback connection` (the non-ASCII-username issue
+> noted above), add this line via **Help ▸ Edit Custom VM Options** and restart, pointing at an
+> ASCII path:
 > ```
-> -Djava.io.tmpdir=D:\tmp
+> -Djava.io.tmpdir=C:\tmp
 > ```
 
 ### Running in the emulator
 
-An Android 16 AVD named `tv16` already exists. Launch it from Android Studio's Device Manager, or:
+Create an AVD in Android Studio's Device Manager and launch it there, or from a terminal:
 
 ```powershell
-D:\Android\Sdk\emulator\emulator.exe -avd tv16
+emulator -avd <your-avd-name>
 ```
 
 ## Casting — what works and what doesn't
