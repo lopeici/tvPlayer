@@ -58,8 +58,18 @@ import com.lopeici.tvplayer.ui.components.findActivity
 import com.lopeici.tvplayer.ui.components.formatClock
 import com.lopeici.tvplayer.ui.components.timeRange
 
+/** Full-screen player route (compact / folded layout). */
 @Composable
 fun PlayerScreen(vm: TvViewModel, onBack: () -> Unit) {
+    PlayerContent(vm, fullScreen = true, onBack = onBack)
+}
+
+/**
+ * The player UI. [fullScreen] = true drives the immersive full-screen route (hidden system bars,
+ * a back button); false is the side pane used in the wide / unfolded two-pane layout.
+ */
+@Composable
+fun PlayerContent(vm: TvViewModel, fullScreen: Boolean, onBack: (() -> Unit)? = null) {
     val current by vm.currentChannel.collectAsStateWithLifecycle()
     val isPlaying by vm.isPlaying.collectAsStateWithLifecycle()
     val isCasting by vm.isCasting.collectAsStateWithLifecycle()
@@ -74,7 +84,19 @@ fun PlayerScreen(vm: TvViewModel, onBack: () -> Unit) {
     var showGuide by remember { mutableStateOf(false) }
     val scrim = Color.Black.copy(alpha = 0.45f)
 
-    KeepScreenOnImmersive()
+    PlayerWindowEffects(hideBars = fullScreen)
+
+    // In the side pane, show a hint until something is playing.
+    if (!fullScreen && current == null) {
+        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            Text(
+                "Pick a channel to start watching",
+                color = Color.White.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+        return
+    }
 
     Box(
         Modifier
@@ -114,8 +136,10 @@ fun PlayerScreen(vm: TvViewModel, onBack: () -> Unit) {
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                if (fullScreen && onBack != null) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                    }
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
                     Text(
@@ -247,21 +271,23 @@ private fun ChannelNumberDialog(onConfirm: (Int) -> Unit, onDismiss: () -> Unit)
     )
 }
 
-/** Hides system bars and keeps the screen on while the player is on screen; restores on exit. */
+/** Keeps the screen on while the player is shown; hides the system bars only in full-screen. */
 @Composable
-private fun KeepScreenOnImmersive() {
+private fun PlayerWindowEffects(hideBars: Boolean) {
     val view = LocalView.current
-    DisposableEffect(Unit) {
+    DisposableEffect(hideBars) {
         val window = view.context.findActivity()?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val controller = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
-        controller?.apply {
-            hide(WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (hideBars) {
+            controller?.apply {
+                hide(WindowInsetsCompat.Type.systemBars())
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
         }
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            controller?.show(WindowInsetsCompat.Type.systemBars())
+            if (hideBars) controller?.show(WindowInsetsCompat.Type.systemBars())
         }
     }
 }

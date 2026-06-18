@@ -18,6 +18,9 @@ APK** (no Play Store).
 - **Channel zapping** — next/previous channel and a channel-number jump (like a TV remote).
 - **Chromecast** — cast the current channel to a Cast device. Because the Chromecast streams
   directly, **casting continues when you minimize the app**.
+- **Foldables & tablets** — adaptive layout: on a wide/unfolded screen the channel list and
+  player appear side-by-side with a navigation rail; on a phone (or folded) it's the single-pane
+  layout. Folding/unfolding does not restart the app or interrupt playback.
 
 ## Tech stack
 
