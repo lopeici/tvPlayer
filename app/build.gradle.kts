@@ -15,6 +15,19 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+// "personal" flavor seed: a pre-loaded playlist baked into the personal build only. Credentials
+// live in personal.properties (git-ignored), so they never reach the repo. Other builds (generic)
+// ship with no seed, so a fresh clone without this file still builds normally.
+val personalPropertiesFile = rootProject.file("personal.properties")
+val personalProperties = Properties().apply {
+    if (personalPropertiesFile.exists()) {
+        FileInputStream(personalPropertiesFile).use { load(it) }
+    }
+}
+// Quote + escape a value for use as a BuildConfig String literal.
+fun buildConfigString(value: String): String =
+    "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "com.lopeici.tvplayer"
     compileSdk = 36
@@ -25,6 +38,33 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+
+        // Default: no pre-loaded playlist. The `personal` flavor overrides these below.
+        buildConfigField("String", "SEED_PLAYLIST_URL", "\"\"")
+        buildConfigField("String", "SEED_PLAYLIST_NAME", "\"\"")
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        // Standard build for anyone — starts empty, add playlists in-app.
+        create("generic") {
+            dimension = "distribution"
+        }
+        // Private build with a pre-loaded playlist (from personal.properties). Same applicationId,
+        // so installing it upgrades an existing install in place.
+        create("personal") {
+            dimension = "distribution"
+            buildConfigField(
+                "String",
+                "SEED_PLAYLIST_URL",
+                buildConfigString(personalProperties.getProperty("url", "")),
+            )
+            buildConfigField(
+                "String",
+                "SEED_PLAYLIST_NAME",
+                buildConfigString(personalProperties.getProperty("name", "Personal")),
+            )
+        }
     }
 
     signingConfigs {
@@ -58,6 +98,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

@@ -12,5 +12,7 @@
 keystore.properties
 *.jks
 *.keystore
+# Personal build seed (contains IPTV credentials) — never commit
+personal.properties
 # Kotlin build cache
 .kotlin/

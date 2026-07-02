@@ -11,6 +11,8 @@ class TvPlayerApp : Application() {
         super.onCreate()
         installCrashLogger()
         container = AppContainer(this)
+        // Personal flavor only: seed the built-in playlist on first launch (no-op when unset).
+        container.repository.seedIfNeeded(BuildConfig.SEED_PLAYLIST_NAME, BuildConfig.SEED_PLAYLIST_URL)
     }
 
     /** Persists uncaught-exception stack traces to filesDir/crash_log.txt for later diagnosis. */

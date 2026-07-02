@@ -1,8 +1,12 @@
 package com.lopeici.tvplayer.ui.screens
 
 import android.view.WindowManager
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +21,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuOpen
@@ -43,13 +48,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
@@ -61,10 +78,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.CastButton
+import com.lopeici.tvplayer.ui.components.isTelevision
 import com.lopeici.tvplayer.ui.components.PlayerSurface
 import com.lopeici.tvplayer.ui.components.findActivity
 import com.lopeici.tvplayer.ui.components.formatClock
 import com.lopeici.tvplayer.ui.components.timeRange
+import kotlinx.coroutines.delay
 
 /** Full-screen player route (compact / folded layout). */
 @Composable
@@ -95,9 +114,43 @@ fun PlayerContent(
     val nextProg = nowNext.second
 
     var controlsVisible by remember { mutableStateOf(true) }
+    var wakeNonce by remember { mutableStateOf(0) }
     var showJump by remember { mutableStateOf(false) }
     var showGuide by remember { mutableStateOf(false) }
     val scrim = Color.Black.copy(alpha = 0.45f)
+
+    val context = LocalContext.current
+    val isTv = remember { context.isTelevision() }
+    val interaction = remember { MutableInteractionSource() }
+    val playFocus = remember { FocusRequester() }
+    val rootFocus = remember { FocusRequester() }
+    // Reveal the controls and reset the idle timer — called on any tap / D-pad key / pointer move.
+    val wake: () -> Unit = { controlsVisible = true; wakeNonce++ }
+
+    // Auto-hide the controls after 5s idle. Any wake() bumps wakeNonce, which restarts this timer.
+    LaunchedEffect(controlsVisible, wakeNonce, current?.key) {
+        if (controlsVisible && current != null) {
+            delay(5_000)
+            controlsVisible = false
+        }
+    }
+
+    // Briefly show the controls (channel name / guide) whenever the channel changes.
+    LaunchedEffect(current?.key) { if (current != null) wake() }
+
+    // On a TV there is no touch: while the controls are visible keep D-pad focus on them; while hidden,
+    // park focus on the root surface so the first remote key press brings them back (see onPreviewKeyEvent).
+    LaunchedEffect(isTv, controlsVisible, current?.key) {
+        if (!isTv || current == null) return@LaunchedEffect
+        if (controlsVisible) {
+            repeat(8) {
+                if (runCatching { playFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+                delay(60)
+            }
+        } else {
+            runCatching { rootFocus.requestFocus() }
+        }
+    }
 
     PlayerWindowEffects(hideBars = fullScreen)
 
@@ -113,14 +166,47 @@ fun PlayerContent(
         return
     }
 
+    // Wake the controls on pointer movement (mouse / air-mouse); taps and D-pad are handled below.
+    val pointerWake = Modifier.pointerInput(current?.key) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent()
+                if (event.type == PointerEventType.Move || event.type == PointerEventType.Enter) wake()
+            }
+        }
+    }
+
+    // Touch: tap toggles the controls. TV: a focusable surface catches D-pad keys even while the
+    // controls are hidden, so the first press reveals them (and is consumed) rather than being lost.
+    val platformInteraction = if (isTv) {
+        Modifier
+            .focusRequester(rootFocus)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                val k = event.key
+                val isDpad = k == Key.DirectionUp || k == Key.DirectionDown ||
+                    k == Key.DirectionLeft || k == Key.DirectionRight ||
+                    k == Key.DirectionCenter || k == Key.Enter
+                if (event.type == KeyEventType.KeyDown && isDpad && current != null) {
+                    val wasHidden = !controlsVisible
+                    wake()
+                    wasHidden   // consume only when the press merely revealed hidden controls
+                } else {
+                    false       // never swallow Back etc. — let the system handle them
+                }
+            }
+    } else {
+        Modifier.clickable(interactionSource = interaction, indication = null) {
+            if (controlsVisible) controlsVisible = false else wake()
+        }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) { controlsVisible = !controlsVisible },
+            .then(pointerWake)
+            .then(platformInteraction),
     ) {
         PlayerSurface(player = vm.playerManager.player, modifier = Modifier.fillMaxSize())
 
@@ -142,7 +228,13 @@ fun PlayerContent(
             }
         }
 
-        if (controlsVisible) {
+        AnimatedVisibility(
+            visible = controlsVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.matchParentSize(),
+        ) {
+            Box(Modifier.fillMaxSize()) {
             Row(
                 Modifier
                     .align(Alignment.TopCenter)
@@ -198,7 +290,7 @@ fun PlayerContent(
                     }
                 }
                 if (onToggleFullScreen != null) {
-                    IconButton(onClick = onToggleFullScreen) {
+                    IconButton(onClick = onToggleFullScreen, modifier = Modifier.tvFocusHighlight()) {
                         Icon(
                             if (fullScreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
                             contentDescription = if (fullScreen) "Exit full screen" else "Full screen",
@@ -220,28 +312,32 @@ fun PlayerContent(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = { vm.zapPrevious() }) {
+                IconButton(onClick = { vm.zapPrevious() }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous channel", tint = Color.White)
                 }
-                IconButton(onClick = { vm.togglePlayPause() }) {
+                IconButton(
+                    onClick = { vm.togglePlayPause() },
+                    modifier = Modifier.focusRequester(playFocus).tvFocusHighlight(),
+                ) {
                     Icon(
                         if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                         contentDescription = "Play/Pause",
                         tint = Color.White,
                     )
                 }
-                IconButton(onClick = { vm.zapNext() }) {
+                IconButton(onClick = { vm.zapNext() }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.SkipNext, contentDescription = "Next channel", tint = Color.White)
                 }
-                IconButton(onClick = { vm.retry() }) {
+                IconButton(onClick = { vm.retry() }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.Refresh, contentDescription = "Refresh channel", tint = Color.White)
                 }
-                IconButton(onClick = { showGuide = true }) {
+                IconButton(onClick = { showGuide = true }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.Schedule, contentDescription = "TV guide", tint = Color.White)
                 }
-                IconButton(onClick = { showJump = true }) {
+                IconButton(onClick = { showJump = true }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.Dialpad, contentDescription = "Go to channel number", tint = Color.White)
                 }
+            }
             }
         }
     }
@@ -330,4 +426,16 @@ private fun PlayerWindowEffects(hideBars: Boolean) {
             if (hideBars) controller?.show(WindowInsetsCompat.Type.systemBars())
         }
     }
+}
+
+/** A visible focus ring for D-pad (TV) navigation; invisible on touch, where nothing holds focus. */
+@Composable
+private fun Modifier.tvFocusHighlight(): Modifier {
+    var focused by remember { mutableStateOf(false) }
+    return this
+        .onFocusChanged { focused = it.isFocused }
+        .background(
+            color = if (focused) Color.White.copy(alpha = 0.22f) else Color.Transparent,
+            shape = CircleShape,
+        )
 }

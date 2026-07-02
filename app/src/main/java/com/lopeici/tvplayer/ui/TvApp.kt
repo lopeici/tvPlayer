@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -41,6 +42,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lopeici.tvplayer.data.Channel
 import com.lopeici.tvplayer.ui.components.MiniPlayer
 import com.lopeici.tvplayer.ui.components.PlayerSurface
+import com.lopeici.tvplayer.ui.components.isTelevision
 import com.lopeici.tvplayer.ui.screens.ChannelsScreen
 import com.lopeici.tvplayer.ui.screens.FavoritesScreen
 import com.lopeici.tvplayer.ui.screens.PlayerContent
@@ -79,10 +81,16 @@ fun TvApp(vm: TvViewModel, isInPip: Boolean = false, onImportFile: () -> Unit) {
 /** Two-pane layout for unfolded foldables / tablets: rail + channel list + always-present player. */
 @Composable
 private fun WideLayout(vm: TvViewModel, onImportFile: () -> Unit) {
+    val context = LocalContext.current
+    val isTv = remember { context.isTelevision() }
     var selected by remember { mutableStateOf(Tab.Channels) }
     var listVisible by remember { mutableStateOf(true) }
     var playerFullScreen by remember { mutableStateOf(false) }
-    val onPlay: (Channel, List<Channel>) -> Unit = { channel, queue -> vm.play(channel, queue) }
+    val onPlay: (Channel, List<Channel>) -> Unit = { channel, queue ->
+        vm.play(channel, queue)
+        // On a TV, selecting a channel goes full-screen immediately (no fiddly maximize button to reach).
+        if (isTv) playerFullScreen = true
+    }
 
     if (playerFullScreen) {
         BackHandler { playerFullScreen = false }

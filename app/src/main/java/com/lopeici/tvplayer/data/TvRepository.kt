@@ -78,8 +78,15 @@ class TvRepository(private val context: Context) {
         val active = readActiveId()?.takeIf { id -> _playlists.value.any { it.id == id } }
         _activePlaylistId.value = active
         if (active != null) scope.launch {
-            _channels.value = readChannels(active)
-            _playlists.value.firstOrNull { it.id == active }?.let { if (it.epgUrl != null) loadEpg(it) }
+            val chans = readChannels(active)
+            _channels.value = chans
+            val pl = _playlists.value.firstOrNull { it.id == active }
+            if (chans.isEmpty() && pl?.source == PlaylistSource.URL) {
+                // Entry was saved but channels never loaded (e.g. a prior fetch failed) — retry now.
+                runCatching { refresh(active) }
+            } else if (pl?.epgUrl != null) {
+                loadEpg(pl)
+            }
         }
     }
 
@@ -118,6 +125,38 @@ class TvRepository(private val context: Context) {
 
     suspend fun setActive(id: String) = withContext(Dispatchers.IO) {
         activate(id, readChannels(id))
+    }
+
+    /**
+     * One-time seed of a built-in playlist (used by the `personal` build flavor). Runs only when
+     * there are no playlists yet and we haven't seeded before; a marker file makes it permanent, so
+     * if the user later deletes the playlist it does not silently come back. No-op when [url] is blank.
+     *
+     * The playlist *entry* is persisted immediately, before any network call, so a fetch failure
+     * (e.g. the server returns HTTP 400) never loses it — the channels load via [refresh] here and
+     * are retried on every launch until they succeed (see the auto-retry in `init`).
+     */
+    fun seedIfNeeded(name: String, url: String) {
+        if (url.isBlank()) return
+        val marker = File(dir, "seeded.txt")
+        if (marker.exists()) return
+        runCatching { marker.writeText("1") }       // seed exactly once, success or not
+        if (_playlists.value.isNotEmpty()) return    // user already has playlists: don't seed
+
+        val id = UUID.randomUUID().toString()
+        val pl = Playlist(
+            id = id,
+            name = name.ifBlank { hostOf(url) },
+            source = PlaylistSource.URL,
+            uri = url.trim(),
+            epgUrl = null,
+            addedAt = now(),
+        )
+        _playlists.value = listOf(pl)
+        persistPlaylists()
+        _activePlaylistId.value = id
+        writeActiveId(id)
+        scope.launch { runCatching { refresh(id) } }
     }
 
     suspend fun refresh(id: String) = guarded {
