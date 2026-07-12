@@ -44,6 +44,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -404,7 +405,20 @@ fun PlayerContent(
             } else {
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
                     items(schedule) { p ->
+                        // Rows are focusable so the D-pad can scroll the schedule on TV; the
+                        // focused row is tinted since there's no other focus indication.
+                        var focused by remember { mutableStateOf(false) }
                         ListItem(
+                            modifier = Modifier
+                                .onFocusChanged { focused = it.isFocused }
+                                .focusable(),
+                            colors = ListItemDefaults.colors(
+                                containerColor = if (focused) {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                } else {
+                                    ListItemDefaults.containerColor
+                                },
+                            ),
                             overlineContent = { Text(p.timeRange()) },
                             headlineContent = { Text(p.title) },
                             supportingContent = p.desc?.let {
