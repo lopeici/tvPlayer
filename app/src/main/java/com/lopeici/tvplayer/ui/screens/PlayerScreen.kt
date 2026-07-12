@@ -26,6 +26,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Menu
@@ -111,6 +113,7 @@ fun PlayerContent(
     val playbackState by vm.playerManager.playbackState.collectAsStateWithLifecycle()
     val error by vm.playerError.collectAsStateWithLifecycle()
     val nowNext by vm.currentNowNext.collectAsStateWithLifecycle()
+    val favorites by vm.favorites.collectAsStateWithLifecycle()
     val nowProg = nowNext.first
     val nextProg = nowNext.second
 
@@ -353,6 +356,17 @@ fun PlayerContent(
                 }
                 IconButton(onClick = { vm.retry() }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.Refresh, contentDescription = "Refresh channel", tint = Color.White)
+                }
+                IconButton(
+                    onClick = { current?.let { vm.toggleFavorite(it) } },
+                    modifier = Modifier.tvFocusHighlight(),
+                ) {
+                    val isFav = current?.key?.let { it in favorites } == true
+                    Icon(
+                        if (isFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = if (isFav) "Remove favorite" else "Add favorite",
+                        tint = if (isFav) MaterialTheme.colorScheme.primary else Color.White,
+                    )
                 }
                 IconButton(onClick = { showGuide = true }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.Schedule, contentDescription = "TV guide", tint = Color.White)
