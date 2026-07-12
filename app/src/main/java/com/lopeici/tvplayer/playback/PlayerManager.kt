@@ -3,6 +3,8 @@ package com.lopeici.tvplayer.playback
 import android.content.Context
 import androidx.core.net.toUri
 import androidx.media3.cast.CastPlayer
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.DeviceInfo
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -32,6 +34,15 @@ class PlayerManager(context: Context) {
     private val exoPlayer: ExoPlayer = ExoPlayer.Builder(context)
         .setLoadControl(loadControl)
         .setHandleAudioBecomingNoisy(true)
+        // Take audio focus as movie/media playback: pauses when another app (or the voice
+        // assistant) takes focus, and stops playing over other apps' audio.
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                .build(),
+            true,
+        )
         .build()
 
     /** The player the UI binds to. CastPlayer auto-switches between local and remote. */
