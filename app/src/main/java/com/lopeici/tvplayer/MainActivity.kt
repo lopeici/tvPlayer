@@ -104,6 +104,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        // On TV there is no PiP or casting, so leaving the app (Home / backing out) would keep the
+        // stream playing audio in the background. Kill playback entirely; the app reopens idle.
+        // Config changes don't pass through here (the Activity handles them via configChanges).
+        if (isTelevision) vm.stop()
+    }
+
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         isInPip.value = isInPictureInPictureMode
