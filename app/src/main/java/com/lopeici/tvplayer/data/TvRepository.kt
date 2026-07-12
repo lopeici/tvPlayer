@@ -56,6 +56,10 @@ class TvRepository(private val context: Context) {
     private val _recents = MutableStateFlow<List<String>>(emptyList())
     val recents: StateFlow<List<String>> = _recents.asStateFlow()
 
+    /** User-hidden groups/channels per playlist id (see [HiddenState]). */
+    private val _hidden = MutableStateFlow<Map<String, HiddenState>>(emptyMap())
+    val hidden: StateFlow<Map<String, HiddenState>> = _hidden.asStateFlow()
+
     /** EPG programmes for the active playlist, keyed by XMLTV channel id (matched to Channel.tvgId). */
     private val _epg = MutableStateFlow<Map<String, List<Programme>>>(emptyMap())
     val epg: StateFlow<Map<String, List<Programme>>> = _epg.asStateFlow()
@@ -75,6 +79,9 @@ class TvRepository(private val context: Context) {
         _playlists.value = readJson("playlists.json", ListSerializer(Playlist.serializer()), emptyList())
         _favorites.value = readJson("favorites.json", ListSerializer(String.serializer()), emptyList()).toSet()
         _recents.value = readJson("recents.json", ListSerializer(String.serializer()), emptyList())
+        _hidden.value = _playlists.value
+            .associate { it.id to readJson("hidden_${it.id}.json", HiddenState.serializer(), HiddenState()) }
+            .filterValues { !it.isEmpty }
         val active = readActiveId()?.takeIf { id -> _playlists.value.any { it.id == id } }
         _activePlaylistId.value = active
         if (active != null) scope.launch {
@@ -180,6 +187,8 @@ class TvRepository(private val context: Context) {
         persistPlaylists()
         File(dir, "channels_$id.json").delete()
         File(dir, "epg_$id.json").delete()
+        File(dir, "hidden_$id.json").delete()
+        _hidden.update { it - id }
         if (_activePlaylistId.value == id) {
             val next = _playlists.value.firstOrNull()
             if (next != null) {
@@ -215,6 +224,56 @@ class TvRepository(private val context: Context) {
     /** Programmes for a channel's tvg-id, sorted by start time. */
     fun scheduleFor(tvgId: String?): List<Programme> =
         if (tvgId.isNullOrBlank()) emptyList() else _epg.value[tvgId].orEmpty()
+
+    // ---- Hidden channels / groups ---------------------------------------
+
+    /** Channels of any saved playlist (for the playlist editor); the active one comes from memory. */
+    suspend fun channelsFor(id: String): List<Channel> = withContext(Dispatchers.IO) {
+        if (_activePlaylistId.value == id) _channels.value else readChannels(id)
+    }
+
+    suspend fun setChannelHidden(channel: Channel, hidden: Boolean) = withContext(Dispatchers.IO) {
+        updateHidden(channel.playlistId) { h ->
+            when {
+                hidden -> h.copy(channels = h.channels + channel.url, unhidden = h.unhidden - channel.url)
+                // Showing a channel whose group is hidden records an explicit exception.
+                channel.group in h.groups ->
+                    h.copy(channels = h.channels - channel.url, unhidden = h.unhidden + channel.url)
+                else -> h.copy(channels = h.channels - channel.url)
+            }
+        }
+    }
+
+    /**
+     * Hide/show a whole group. Individual overrides for [urlsInGroup] are cleared so the group
+     * toggle always wins; hiding stores the group *name*, keeping future channels hidden too.
+     */
+    suspend fun setGroupHidden(playlistId: String, group: String, urlsInGroup: Collection<String>, hidden: Boolean) =
+        withContext(Dispatchers.IO) {
+            updateHidden(playlistId) { h ->
+                HiddenState(
+                    groups = if (hidden) h.groups + group else h.groups - group,
+                    channels = h.channels - urlsInGroup.toSet(),
+                    unhidden = h.unhidden - urlsInGroup.toSet(),
+                )
+            }
+        }
+
+    /** Bulk hide/show individual channels (used for the "no group" bucket, which has no name to store). */
+    suspend fun setChannelsHidden(playlistId: String, urls: Collection<String>, hidden: Boolean) =
+        withContext(Dispatchers.IO) {
+            updateHidden(playlistId) { h ->
+                if (hidden) h.copy(channels = h.channels + urls, unhidden = h.unhidden - urls.toSet())
+                else h.copy(channels = h.channels - urls.toSet())
+            }
+        }
+
+    private fun updateHidden(playlistId: String, transform: (HiddenState) -> HiddenState) {
+        val next = transform(_hidden.value[playlistId] ?: HiddenState())
+        _hidden.update { if (next.isEmpty) it - playlistId else it + (playlistId to next) }
+        if (next.isEmpty) File(dir, "hidden_$playlistId.json").delete()
+        else writeJson("hidden_$playlistId.json", HiddenState.serializer(), next)
+    }
 
     // ---- Favorites / recents --------------------------------------------
 

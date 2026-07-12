@@ -19,6 +19,26 @@ data class Playlist(
     val addedAt: Long = 0L,
 )
 
+/**
+ * Which parts of a playlist the user has hidden (persisted per playlist as hidden_<id>.json).
+ *
+ * Hiding a *group* stores its name, so channels that appear in that group after a refresh stay
+ * hidden too. [unhidden] holds urls the user re-enabled inside a hidden group; [channels] holds
+ * urls hidden individually. A channel is hidden iff its url is in [channels], or its group is in
+ * [groups] and its url is not in [unhidden].
+ */
+@Serializable
+data class HiddenState(
+    val groups: Set<String> = emptySet(),
+    val channels: Set<String> = emptySet(),
+    val unhidden: Set<String> = emptySet(),
+) {
+    fun isHidden(channel: Channel): Boolean =
+        channel.url in channels || (channel.group in groups && channel.url !in unhidden)
+
+    val isEmpty: Boolean get() = groups.isEmpty() && channels.isEmpty() && unhidden.isEmpty()
+}
+
 /** A single TV channel parsed from an M3U playlist. */
 @Serializable
 data class Channel(

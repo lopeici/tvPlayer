@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
@@ -52,6 +53,13 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
     val castAsHls by vm.castAsHls.collectAsStateWithLifecycle()
     var showAddUrl by remember { mutableStateOf(false) }
     var epgFor by remember { mutableStateOf<Playlist?>(null) }
+    var editing by remember { mutableStateOf<Playlist?>(null) }
+
+    editing?.let { playlist ->
+        // Full-screen show/hide editor replaces the tab content while open.
+        PlaylistEditScreen(vm, playlist, onClose = { editing = null })
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -106,6 +114,7 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
                         playlist = playlist,
                         isActive = playlist.id == activeId,
                         onActivate = { vm.setActivePlaylist(playlist.id) },
+                        onEdit = { editing = playlist },
                         onRefresh = { vm.refreshPlaylist(playlist.id) },
                         onSetEpg = { epgFor = playlist },
                         onDelete = { vm.deletePlaylist(playlist.id) },
@@ -140,6 +149,7 @@ private fun PlaylistRow(
     playlist: Playlist,
     isActive: Boolean,
     onActivate: () -> Unit,
+    onEdit: () -> Unit,
     onRefresh: () -> Unit,
     onSetEpg: () -> Unit,
     onDelete: () -> Unit,
@@ -171,6 +181,9 @@ private fun PlaylistRow(
         },
         trailingContent = {
             Row {
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Edit channels (show/hide)")
+                }
                 IconButton(onClick = onSetEpg) {
                     Icon(
                         Icons.Filled.Schedule,

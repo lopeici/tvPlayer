@@ -46,12 +46,22 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     val searchQuery = MutableStateFlow("")
     val selectedGroup = MutableStateFlow<String?>(null)
 
-    val groups: StateFlow<List<String>> = channels
+    /** Per-playlist hidden groups/channels (edited via the playlist editor). */
+    val hidden = repo.hidden
+
+    // Channels minus user-hidden ones — everything the browsing UI shows derives from this.
+    private val shownChannels: StateFlow<List<Channel>> =
+        combine(channels, repo.hidden) { list, hidden ->
+            if (hidden.isEmpty()) list
+            else list.filterNot { ch -> hidden[ch.playlistId]?.isHidden(ch) == true }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val groups: StateFlow<List<String>> = shownChannels
         .map { list -> list.mapNotNull { it.group }.distinct().sorted() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val visibleChannels: StateFlow<List<Channel>> =
-        combine(channels, searchQuery, selectedGroup) { list, query, group ->
+        combine(shownChannels, searchQuery, selectedGroup) { list, query, group ->
             list.filter { ch ->
                 (group == null || ch.group == group) &&
                     (query.isBlank() || ch.name.contains(query, ignoreCase = true))
@@ -59,11 +69,11 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val favoriteChannels: StateFlow<List<Channel>> =
-        combine(channels, favorites) { list, favs -> list.filter { it.key in favs } }
+        combine(shownChannels, favorites) { list, favs -> list.filter { it.key in favs } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val recentChannels: StateFlow<List<Channel>> =
-        combine(channels, repo.recents) { list, recents ->
+        combine(shownChannels, repo.recents) { list, recents ->
             recents.mapNotNull { key -> list.firstOrNull { it.key == key } }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -126,6 +136,21 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     fun deletePlaylist(id: String) = viewModelScope.launch { repo.deletePlaylist(id) }
     fun setEpgUrl(id: String, epgUrl: String?) = viewModelScope.launch { repo.setEpgUrl(id, epgUrl) }
     fun refreshEpg(id: String) = viewModelScope.launch { repo.refreshEpg(id) }
+
+    // ---- Playlist editor (hide/show) ----
+
+    /** All channels of a playlist, including hidden ones (the editor lists everything). */
+    suspend fun channelsOf(playlistId: String): List<Channel> = repo.channelsFor(playlistId)
+
+    fun setChannelHidden(channel: Channel, hidden: Boolean) =
+        viewModelScope.launch { repo.setChannelHidden(channel, hidden) }
+
+    /** Hide/show a whole group; `group == null` is the "no group" bucket (bulk individual hide). */
+    fun setGroupHidden(playlistId: String, group: String?, urlsInGroup: Collection<String>, hidden: Boolean) =
+        viewModelScope.launch {
+            if (group == null) repo.setChannelsHidden(playlistId, urlsInGroup, hidden)
+            else repo.setGroupHidden(playlistId, group, urlsInGroup, hidden)
+        }
 
     /** Upcoming programmes (incl. current) for a channel's tvg-id. */
     fun scheduleFor(tvgId: String?): List<Programme> {
