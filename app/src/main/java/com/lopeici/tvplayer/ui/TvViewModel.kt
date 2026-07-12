@@ -170,6 +170,12 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repo.recordRecent(channel) }
     }
 
+    /** Stop the stream entirely; clearing the queue also keeps the cast watcher from restarting it. */
+    fun stop() {
+        queue.value = emptyList()
+        playerManager.stop()
+    }
+
     fun zapNext() = playerManager.next()
     fun zapPrevious() = playerManager.previous()
     fun togglePlayPause() = playerManager.togglePlayPause()

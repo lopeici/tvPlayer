@@ -93,6 +93,13 @@ class PlayerManager(context: Context) {
     fun previous() = player.run { if (hasPreviousMediaItem()) seekToPreviousMediaItem() }
     fun togglePlayPause() = player.run { if (isPlaying) pause() else play() }
 
+    /** Fully stop the stream and clear the queue — nothing is "now playing" afterwards. */
+    fun stop() {
+        _error.value = null
+        player.stop()
+        player.clearMediaItems()
+    }
+
     fun retry() {
         _error.value = null
         player.prepare()

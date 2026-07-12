@@ -156,6 +156,7 @@ private fun CompactLayout(vm: TvViewModel, onImportFile: () -> Unit) {
                         nowTitle = nowNext.first?.title,
                         isPlaying = isPlaying,
                         onPlayPause = { vm.togglePlayPause() },
+                        onStop = { vm.stop() },
                         onClick = { navController.navigate(ROUTE_PLAYER) { launchSingleTop = true } },
                     )
                 }

@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -324,6 +325,17 @@ fun PlayerContent(
                         contentDescription = "Play/Pause",
                         tint = Color.White,
                     )
+                }
+                IconButton(
+                    onClick = {
+                        vm.stop()
+                        // Nothing is playing anymore: leave the full-screen player (back on the
+                        // phone route; back to the two-pane layout on tablet).
+                        if (fullScreen) (onBack ?: onToggleFullScreen)?.invoke()
+                    },
+                    modifier = Modifier.tvFocusHighlight(),
+                ) {
+                    Icon(Icons.Filled.Stop, contentDescription = "Stop", tint = Color.White)
                 }
                 IconButton(onClick = { vm.zapNext() }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.SkipNext, contentDescription = "Next channel", tint = Color.White)
