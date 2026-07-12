@@ -13,13 +13,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
@@ -47,6 +45,7 @@ import com.lopeici.tvplayer.data.Playlist
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.CenterProgress
 import com.lopeici.tvplayer.ui.components.EmptyState
+import com.lopeici.tvplayer.ui.components.SearchTextField
 import com.lopeici.tvplayer.ui.components.isTelevision
 
 /**
@@ -94,12 +93,10 @@ fun PlaylistEditScreen(vm: TvViewModel, playlist: Playlist, onClose: () -> Unit)
             }
         }
 
-        OutlinedTextField(
+        SearchTextField(
             value = query,
             onValueChange = { query = it },
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            placeholder = { Text("Search channels") },
-            singleLine = true,
+            placeholder = "Search channels",
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         )
 

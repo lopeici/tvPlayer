@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.FilterChip
@@ -17,7 +16,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,6 +27,7 @@ import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.CenterProgress
 import com.lopeici.tvplayer.ui.components.ChannelRow
 import com.lopeici.tvplayer.ui.components.EmptyState
+import com.lopeici.tvplayer.ui.components.SearchTextField
 
 @Composable
 fun ChannelsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
@@ -45,10 +44,10 @@ fun ChannelsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
     val hidden by vm.hidden.collectAsStateWithLifecycle()
 
     Column(Modifier.fillMaxSize()) {
-        OutlinedTextField(
+        SearchTextField(
             value = query,
             onValueChange = vm::setSearch,
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            placeholder = "Search channels",
             // While searching, an eye toggle includes user-hidden channels in the results.
             trailingIcon = if (query.isBlank()) null else {
                 {
@@ -62,8 +61,6 @@ fun ChannelsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
                     }
                 }
             },
-            placeholder = { Text("Search channels") },
-            singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         )
 
