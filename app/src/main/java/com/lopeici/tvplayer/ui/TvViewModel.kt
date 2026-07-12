@@ -57,7 +57,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val groups: StateFlow<List<String>> = shownChannels
-        .map { list -> list.mapNotNull { it.group }.distinct().sorted() }
+        .map { list -> list.mapNotNull { it.group }.distinct().sortedBy { it.lowercase() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val visibleChannels: StateFlow<List<Channel>> =
