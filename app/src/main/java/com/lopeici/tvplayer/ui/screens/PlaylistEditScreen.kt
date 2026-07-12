@@ -31,6 +31,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,6 +47,7 @@ import com.lopeici.tvplayer.data.Playlist
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.CenterProgress
 import com.lopeici.tvplayer.ui.components.EmptyState
+import com.lopeici.tvplayer.ui.components.isTelevision
 
 /**
  * Full-screen editor to show/hide a playlist's channels. Groups are collapsible headers with a
@@ -58,6 +65,8 @@ fun PlaylistEditScreen(vm: TvViewModel, playlist: Playlist, onClose: () -> Unit)
     val hidden = hiddenMap[playlist.id] ?: HiddenState()
     var query by remember { mutableStateOf("") }
     val expanded = remember { mutableStateMapOf<String?, Boolean>() }
+    val context = LocalContext.current
+    val isTv = remember { context.isTelevision() }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -123,6 +132,7 @@ fun PlaylistEditScreen(vm: TvViewModel, playlist: Playlist, onClose: () -> Unit)
                                     else -> ToggleableState.Indeterminate
                                 },
                                 expanded = isExpanded,
+                                tv = isTv,
                                 onToggleExpand = { expanded[group] = !(expanded[group] ?: false) },
                                 onToggleChecked = { nowChecked ->
                                     vm.setGroupHidden(playlist.id, group, all.map { it.url }, hidden = !nowChecked)
@@ -135,6 +145,7 @@ fun PlaylistEditScreen(vm: TvViewModel, playlist: Playlist, onClose: () -> Unit)
                                 ChannelEditRow(
                                     channel = channel,
                                     checked = !hidden.isHidden(channel),
+                                    tv = isTv,
                                     onCheckedChange = { checked -> vm.setChannelHidden(channel, hidden = !checked) },
                                 )
                             }
@@ -146,6 +157,11 @@ fun PlaylistEditScreen(vm: TvViewModel, playlist: Playlist, onClose: () -> Unit)
     }
 }
 
+/**
+ * On touch, tapping the row expands/collapses and the checkbox/chevron are their own tap targets.
+ * On TV the row is a single focus stop: D-pad center selects/deselects the group, right expands,
+ * left collapses; the checkbox and chevron become display-only.
+ */
 @Composable
 private fun GroupHeader(
     name: String,
@@ -153,17 +169,30 @@ private fun GroupHeader(
     total: Int,
     state: ToggleableState,
     expanded: Boolean,
+    tv: Boolean,
     onToggleExpand: () -> Unit,
     onToggleChecked: (Boolean) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onToggleExpand).padding(start = 4.dp),
+        Modifier.fillMaxWidth()
+            .onPreviewKeyEvent { event ->
+                if (!tv || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionRight -> if (!expanded) { onToggleExpand(); true } else false
+                    Key.DirectionLeft -> if (expanded) { onToggleExpand(); true } else false
+                    else -> false
+                }
+            }
+            .clickable(onClick = {
+                if (tv) onToggleChecked(state != ToggleableState.On) else onToggleExpand()
+            })
+            .padding(start = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TriStateCheckbox(
             state = state,
             // Standard cycle: fully-on unchecks; off/mixed checks everything.
-            onClick = { onToggleChecked(state != ToggleableState.On) },
+            onClick = if (tv) null else ({ onToggleChecked(state != ToggleableState.On) }),
         )
         Text(
             name,
@@ -177,24 +206,33 @@ private fun GroupHeader(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        IconButton(onClick = onToggleExpand) {
+        if (tv) {
             Icon(
                 if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                 contentDescription = if (expanded) "Collapse" else "Expand",
+                modifier = Modifier.padding(12.dp),
             )
+        } else {
+            IconButton(onClick = onToggleExpand) {
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun ChannelEditRow(channel: Channel, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun ChannelEditRow(channel: Channel, checked: Boolean, tv: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth()
             .clickable { onCheckedChange(!checked) }
             .padding(start = 24.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        // On TV the checkbox is display-only so the row is a single focus stop (click toggles).
+        Checkbox(checked = checked, onCheckedChange = if (tv) null else onCheckedChange)
         Text(
             channel.name,
             style = MaterialTheme.typography.bodyMedium,
