@@ -25,7 +25,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,6 +42,7 @@ import com.lopeici.tvplayer.data.Playlist
 import com.lopeici.tvplayer.data.PlaylistSource
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.EmptyState
+import com.lopeici.tvplayer.ui.components.TvTextField
 
 @Composable
 fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
@@ -209,27 +209,24 @@ private fun AddUrlDialog(onConfirm: (String, String, String?) -> Unit, onDismiss
         title = { Text("Add playlist URL") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+                TvTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Name (optional)") },
-                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                TvTextField(
                     value = url,
                     onValueChange = { url = it },
                     label = { Text("M3U URL") },
                     placeholder = { Text("http://...") },
-                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                TvTextField(
                     value = epgUrl,
                     onValueChange = { epgUrl = it },
                     label = { Text("EPG / XMLTV URL (optional)") },
                     placeholder = { Text("http://...xmltv.xml") },
-                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -263,12 +260,11 @@ private fun EpgUrlDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedTextField(
+                TvTextField(
                     value = epgUrl,
                     onValueChange = { epgUrl = it },
                     label = { Text("XMLTV URL") },
                     placeholder = { Text("http://...xmltv.xml(.gz)") },
-                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (playlist.epgUrl != null) {

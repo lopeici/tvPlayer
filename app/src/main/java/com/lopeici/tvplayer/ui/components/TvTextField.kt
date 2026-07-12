@@ -27,16 +27,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 /**
- * Search field that is D-pad friendly on TV: focusing it only highlights it (primary border);
- * the field itself — and thus the on-screen keyboard — activates when the user presses select.
- * On touch devices it behaves like a plain [OutlinedTextField].
+ * Single-line [OutlinedTextField] that is D-pad friendly on TV: focusing it only highlights it
+ * (primary border); the field itself — and thus the on-screen keyboard — activates when the user
+ * presses select. On touch devices it behaves like a plain [OutlinedTextField].
  */
 @Composable
-fun SearchTextField(
+fun TvTextField(
     value: String,
     onValueChange: (String) -> Unit,
-    placeholder: String,
     modifier: Modifier = Modifier,
+    label: @Composable (() -> Unit)? = null,
+    placeholder: @Composable (() -> Unit)? = null,
+    leadingIcon: @Composable (() -> Unit)? = null,
     trailingIcon: @Composable (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -63,8 +65,9 @@ fun SearchTextField(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            placeholder = { Text(placeholder) },
+            label = label,
+            leadingIcon = leadingIcon,
+            placeholder = placeholder,
             trailingIcon = trailingIcon,
             singleLine = true,
             modifier = Modifier
@@ -81,4 +84,23 @@ fun SearchTextField(
                 ),
         )
     }
+}
+
+/** [TvTextField] preconfigured as a search box (search leading icon + placeholder). */
+@Composable
+fun SearchTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    trailingIcon: @Composable (() -> Unit)? = null,
+) {
+    TvTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        placeholder = { Text(placeholder) },
+        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        trailingIcon = trailingIcon,
+    )
 }
