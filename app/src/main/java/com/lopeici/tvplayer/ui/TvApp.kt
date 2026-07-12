@@ -25,6 +25,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +43,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lopeici.tvplayer.data.Channel
 import com.lopeici.tvplayer.ui.components.MiniPlayer
@@ -95,6 +100,37 @@ private fun WideLayout(vm: TvViewModel, onImportFile: () -> Unit) {
         val wasIdle = vm.currentChannel.value == null
         vm.play(channel, queue)
         if (isTv && wasIdle) playerFullScreen = true
+    }
+
+    // TV tunes back into the last watched channel whenever the app comes to the foreground idle
+    // (playback is killed on exit there, so this is the "TV remembers its channel" behavior).
+    if (isTv) {
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val recents by vm.recentChannels.collectAsStateWithLifecycle()
+        val visible by vm.visibleChannels.collectAsStateWithLifecycle()
+        var resumeRequested by remember { mutableStateOf(false) }
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_START && vm.currentChannel.value == null) {
+                    resumeRequested = true
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        // Waits for the persisted recents + channel list to load on a cold start.
+        LaunchedEffect(resumeRequested, recents, visible) {
+            if (!resumeRequested) return@LaunchedEffect
+            if (vm.currentChannel.value != null) {
+                resumeRequested = false
+                return@LaunchedEffect
+            }
+            if (recents.isNotEmpty() && visible.isNotEmpty()) {
+                resumeRequested = false
+                vm.play(recents.first(), visible)
+                playerFullScreen = true
+            }
+        }
     }
 
     if (playerFullScreen) {
