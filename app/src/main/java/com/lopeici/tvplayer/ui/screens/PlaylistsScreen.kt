@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,6 +44,7 @@ import com.lopeici.tvplayer.data.PlaylistSource
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.EmptyState
 import com.lopeici.tvplayer.ui.components.TvTextField
+import com.lopeici.tvplayer.ui.components.isTelevision
 
 @Composable
 fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
@@ -77,19 +79,22 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
             }
         }
 
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Cast in HLS", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    "Casts each channel's .m3u8 version (needed for Chromecast); local playback is unchanged.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        // Casting doesn't exist on a TV (the TV is the display), so hide the cast setting there.
+        if (!LocalContext.current.isTelevision()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Cast in HLS", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Casts each channel's .m3u8 version (needed for Chromecast); local playback is unchanged.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = castAsHls, onCheckedChange = { vm.setCastAsHls(it) })
             }
-            Switch(checked = castAsHls, onCheckedChange = { vm.setCastAsHls(it) })
         }
 
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
