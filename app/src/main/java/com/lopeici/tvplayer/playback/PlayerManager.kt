@@ -77,7 +77,7 @@ class PlayerManager(context: Context) {
     fun play(channels: List<Channel>, startIndex: Int, castHls: Boolean = false) {
         if (channels.isEmpty()) return
         val idx = startIndex.coerceIn(0, channels.lastIndex)
-        player.setMediaItems(channels.map { it.toMediaItem(castHls) }, idx, 0L)
+        player.setMediaItems(channels.map { it.toMediaItem(castHls, _isCasting.value) }, idx, 0L)
         player.playWhenReady = true
         player.prepare()
     }
@@ -109,7 +109,7 @@ class PlayerManager(context: Context) {
     private fun friendlyError(e: PlaybackException): String =
         "Can't play this channel (${e.errorCodeName}). It may be offline."
 
-    private fun Channel.toMediaItem(castHls: Boolean): MediaItem {
+    private fun Channel.toMediaItem(castHls: Boolean, casting: Boolean): MediaItem {
         // For casting, optionally use the HLS variant (a stock Chromecast can't play raw mpegts).
         val streamUrl = if (castHls) hlsVariant(url) else url
         // A MIME type is required for Chromecast: the Cast receiver needs a contentType, and
@@ -121,7 +121,11 @@ class PlayerManager(context: Context) {
             path.endsWith(".ts") -> MimeTypes.VIDEO_MP2T
             path.endsWith(".mp4") -> MimeTypes.VIDEO_MP4
             path.endsWith(".mkv") -> MimeTypes.VIDEO_MATROSKA
-            else -> MimeTypes.APPLICATION_M3U8 // most IPTV streams are HLS; a sensible default for casting
+            // Extensionless (Xtream-style) URLs usually serve raw mpegts. Locally the MIME must
+            // stay null so ExoPlayer sniffs the container; forcing HLS here breaks playback with
+            // ERROR_CODE_PARSING_MANIFEST_MALFORMED. When casting, a contentType is mandatory and
+            // HLS is the only shape a stock receiver can play anyway.
+            else -> if (casting) MimeTypes.APPLICATION_M3U8 else null
         }
         return MediaItem.Builder()
             .setUri(streamUrl)
