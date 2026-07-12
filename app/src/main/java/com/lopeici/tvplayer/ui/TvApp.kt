@@ -2,6 +2,7 @@ package com.lopeici.tvplayer.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -114,7 +117,25 @@ private fun WideLayout(vm: TvViewModel, onImportFile: () -> Unit) {
             }
         }
         if (listVisible) {
-            Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding()) {
+            // On TV, fence vertical D-pad movement inside the list pane: while a LazyColumn
+            // scrolls, the next row may not be composed yet and the geometric focus search would
+            // otherwise jump into the player pane. Left/right still reach the rail and player.
+            val fenceVertical = if (isTv) {
+                Modifier
+                    .focusProperties {
+                        onExit = {
+                            if (requestedFocusDirection == FocusDirection.Up ||
+                                requestedFocusDirection == FocusDirection.Down
+                            ) {
+                                cancelFocusChange()
+                            }
+                        }
+                    }
+                    .focusGroup()
+            } else {
+                Modifier
+            }
+            Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding().then(fenceVertical)) {
                 when (selected) {
                     Tab.Channels -> ChannelsScreen(vm, onPlay)
                     Tab.Favorites -> FavoritesScreen(vm, onPlay)
