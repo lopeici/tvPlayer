@@ -10,9 +10,13 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,12 +41,27 @@ fun ChannelsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
     val loading by vm.loading.collectAsStateWithLifecycle()
     val currentChannel by vm.currentChannel.collectAsStateWithLifecycle()
     val currentProgrammes by vm.currentProgrammes.collectAsStateWithLifecycle()
+    val searchHidden by vm.searchHidden.collectAsStateWithLifecycle()
+    val hidden by vm.hidden.collectAsStateWithLifecycle()
 
     Column(Modifier.fillMaxSize()) {
         OutlinedTextField(
             value = query,
             onValueChange = vm::setSearch,
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            // While searching, an eye toggle includes user-hidden channels in the results.
+            trailingIcon = if (query.isBlank()) null else {
+                {
+                    IconButton(onClick = { vm.setSearchHidden(!searchHidden) }) {
+                        Icon(
+                            if (searchHidden) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                            contentDescription = if (searchHidden) "Exclude hidden channels" else "Include hidden channels",
+                            tint = if (searchHidden) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
             placeholder = { Text("Search channels") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -85,6 +104,7 @@ fun ChannelsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
                         currentProgramme = channel.tvgId?.let { currentProgrammes[it] },
                         onClick = { onPlay(channel, visible) },
                         onToggleFavorite = { vm.toggleFavorite(channel) },
+                        dimmed = hidden[channel.playlistId]?.isHidden(channel) == true,
                     )
                     HorizontalDivider()
                 }

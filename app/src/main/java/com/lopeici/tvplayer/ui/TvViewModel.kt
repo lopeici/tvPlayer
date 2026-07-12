@@ -46,6 +46,9 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     val searchQuery = MutableStateFlow("")
     val selectedGroup = MutableStateFlow<String?>(null)
 
+    /** When on, search results also include user-hidden channels. Off by default; only applies while searching. */
+    val searchHidden = MutableStateFlow(false)
+
     /** Per-playlist hidden groups/channels (edited via the playlist editor). */
     val hidden = repo.hidden
 
@@ -61,9 +64,11 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val visibleChannels: StateFlow<List<Channel>> =
-        combine(shownChannels, searchQuery, selectedGroup) { list, query, group ->
+        combine(channels, repo.hidden, searchQuery, selectedGroup, searchHidden) { list, hidden, query, group, withHidden ->
+            val includeHidden = withHidden && query.isNotBlank()
             list.filter { ch ->
-                (group == null || ch.group == group) &&
+                (includeHidden || hidden[ch.playlistId]?.isHidden(ch) != true) &&
+                    (group == null || ch.group == group) &&
                     (query.isBlank() || ch.name.contains(query, ignoreCase = true))
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -121,6 +126,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSearch(value: String) { searchQuery.value = value }
     fun setGroup(value: String?) { selectedGroup.value = value }
+    fun setSearchHidden(value: Boolean) { searchHidden.value = value }
 
     fun isFavorite(channel: Channel): Boolean = channel.key in favorites.value
     fun toggleFavorite(channel: Channel) = viewModelScope.launch { repo.toggleFavorite(channel) }

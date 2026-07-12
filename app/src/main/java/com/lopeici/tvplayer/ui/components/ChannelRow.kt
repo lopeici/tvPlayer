@@ -39,6 +39,7 @@ fun ChannelRow(
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier,
     currentProgramme: Programme? = null,
+    dimmed: Boolean = false,
 ) {
     val subtitle = currentProgramme?.title ?: channel.group
     ListItem(
@@ -48,7 +49,11 @@ fun ChannelRow(
                 channel.name,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                color = if (isPlaying) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                color = when {
+                    isPlaying -> MaterialTheme.colorScheme.primary
+                    dimmed -> MaterialTheme.colorScheme.onSurfaceVariant
+                    else -> Color.Unspecified
+                },
             )
         },
         supportingContent = subtitle?.let {
