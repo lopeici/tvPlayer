@@ -157,7 +157,10 @@ fun PlayerContent(
         }
     }
 
-    PlayerWindowEffects(hideBars = fullScreen)
+    PlayerWindowEffects(
+        hideBars = fullScreen,
+        keepAwake = isPlaying || playbackState == Player.STATE_BUFFERING,
+    )
 
     // In the side pane, show a hint until something is playing.
     if (!fullScreen && current == null) {
@@ -458,13 +461,20 @@ private fun ChannelNumberDialog(onConfirm: (Int) -> Unit, onDismiss: () -> Unit)
     )
 }
 
-/** Keeps the screen on while the player is shown; hides the system bars only in full-screen. */
+/**
+ * Keeps the screen on while a channel is playing/buffering (not while idle on a list, so the
+ * screensaver can start); hides the system bars only in full-screen.
+ */
 @Composable
-private fun PlayerWindowEffects(hideBars: Boolean) {
+private fun PlayerWindowEffects(hideBars: Boolean, keepAwake: Boolean) {
     val view = LocalView.current
-    DisposableEffect(hideBars) {
+    DisposableEffect(hideBars, keepAwake) {
         val window = view.context.findActivity()?.window
-        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (keepAwake) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
         val controller = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
         if (hideBars) {
             controller?.apply {
