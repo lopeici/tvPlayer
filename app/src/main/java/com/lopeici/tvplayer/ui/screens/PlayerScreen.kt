@@ -179,21 +179,32 @@ fun PlayerContent(
 
     // Touch: tap toggles the controls. TV: a focusable surface catches D-pad keys even while the
     // controls are hidden, so the first press reveals them (and is consumed) rather than being lost.
+    // TV remote media keys (play/pause, stop, next/previous, channel up/down) act directly.
     val platformInteraction = if (isTv) {
         Modifier
             .focusRequester(rootFocus)
             .focusable()
             .onPreviewKeyEvent { event ->
-                val k = event.key
-                val isDpad = k == Key.DirectionUp || k == Key.DirectionDown ||
-                    k == Key.DirectionLeft || k == Key.DirectionRight ||
-                    k == Key.DirectionCenter || k == Key.Enter
-                if (event.type == KeyEventType.KeyDown && isDpad && current != null) {
-                    val wasHidden = !controlsVisible
-                    wake()
-                    wasHidden   // consume only when the press merely revealed hidden controls
-                } else {
-                    false       // never swallow Back etc. — let the system handle them
+                if (event.type != KeyEventType.KeyDown || current == null) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+                        vm.togglePlayPause(); wake(); true
+                    }
+                    Key.MediaStop -> {
+                        vm.stop()
+                        if (fullScreen) (onBack ?: onToggleFullScreen)?.invoke()
+                        true
+                    }
+                    Key.MediaNext, Key.ChannelUp -> { vm.zapNext(); wake(); true }
+                    Key.MediaPrevious, Key.ChannelDown -> { vm.zapPrevious(); wake(); true }
+                    Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight,
+                    Key.DirectionCenter, Key.Enter,
+                    -> {
+                        val wasHidden = !controlsVisible
+                        wake()
+                        wasHidden   // consume only when the press merely revealed hidden controls
+                    }
+                    else -> false   // never swallow Back etc. — let the system handle them
                 }
             }
     } else {
