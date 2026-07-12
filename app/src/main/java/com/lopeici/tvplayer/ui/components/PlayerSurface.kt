@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.Player
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.lopeici.tvplayer.R
 
@@ -22,7 +23,11 @@ private val isEmulator: Boolean by lazy {
  * renders correctly there. No built-in controller — the player screen draws its own overlay.
  */
 @Composable
-fun PlayerSurface(player: Player, modifier: Modifier = Modifier) {
+fun PlayerSurface(
+    player: Player,
+    modifier: Modifier = Modifier,
+    resizeMode: Int = AspectRatioFrameLayout.RESIZE_MODE_FIT,
+) {
     AndroidView(
         modifier = modifier,
         factory = { context ->
@@ -31,7 +36,10 @@ fun PlayerSurface(player: Player, modifier: Modifier = Modifier) {
                 this.player = player
             }
         },
-        update = { view -> view.player = player },
+        update = { view ->
+            view.player = player
+            view.resizeMode = resizeMode
+        },
         onRelease = { view -> view.player = null },
     )
 }

@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuOpen
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -87,6 +88,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
+import androidx.media3.ui.AspectRatioFrameLayout
 import java.util.Locale
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.CastButton
@@ -124,6 +126,7 @@ fun PlayerContent(
     val nowNext by vm.currentNowNext.collectAsStateWithLifecycle()
     val favorites by vm.favorites.collectAsStateWithLifecycle()
     val tracks by vm.tracks.collectAsStateWithLifecycle()
+    val resizeMode by vm.resizeMode.collectAsStateWithLifecycle()
     val nowProg = nowNext.first
     val nextProg = nowNext.second
 
@@ -241,7 +244,11 @@ fun PlayerContent(
             .then(pointerWake)
             .then(platformInteraction),
     ) {
-        PlayerSurface(player = vm.playerManager.player, modifier = Modifier.fillMaxSize())
+        PlayerSurface(
+            player = vm.playerManager.player,
+            modifier = Modifier.fillMaxSize(),
+            resizeMode = resizeMode,
+        )
 
         if (playbackState == Player.STATE_BUFFERING) {
             CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
@@ -391,6 +398,21 @@ fun PlayerContent(
                     IconButton(onClick = { showTracks = true }, modifier = Modifier.tvFocusHighlight()) {
                         Icon(Icons.Filled.Subtitles, contentDescription = "Audio & subtitles", tint = Color.White)
                     }
+                }
+                IconButton(onClick = { vm.cycleResizeMode() }, modifier = Modifier.tvFocusHighlight()) {
+                    Icon(
+                        Icons.Filled.AspectRatio,
+                        contentDescription = when (resizeMode) {
+                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Scaling: zoom (tap for stretch)"
+                            AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Scaling: stretch (tap for fit)"
+                            else -> "Scaling: fit (tap for zoom)"
+                        },
+                        tint = if (resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
+                            Color.White
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    )
                 }
                 IconButton(onClick = { showGuide = true }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.Schedule, contentDescription = "TV guide", tint = Color.White)

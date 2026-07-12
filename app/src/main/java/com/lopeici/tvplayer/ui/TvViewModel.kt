@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Tracks
+import androidx.media3.ui.AspectRatioFrameLayout
 import com.lopeici.tvplayer.TvPlayerApp
 import com.lopeici.tvplayer.data.Channel
 import com.lopeici.tvplayer.data.Programme
@@ -38,6 +39,17 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     val playerError = playerManager.error
     val castAsHls = repo.castAsHls
     val tracks = playerManager.tracks
+
+    /** Video scaling: fit (letterbox) → zoom (crop) → fill (stretch). Session-scoped. */
+    val resizeMode = MutableStateFlow(AspectRatioFrameLayout.RESIZE_MODE_FIT)
+
+    fun cycleResizeMode() {
+        resizeMode.value = when (resizeMode.value) {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+            else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+        }
+    }
 
     // Ticks roughly every 30s so "now playing" advances over time.
     private val nowTick: StateFlow<Long> = flow {
