@@ -144,9 +144,10 @@ fun PlayerContent(
     LaunchedEffect(current?.key) { if (current != null) wake() }
 
     // On a TV there is no touch: while the controls are visible keep D-pad focus on them; while hidden,
-    // park focus on the root surface so the first remote key press brings them back (see onPreviewKeyEvent).
-    LaunchedEffect(isTv, controlsVisible, current?.key) {
-        if (!isTv || current == null) return@LaunchedEffect
+    // park focus on the root surface so remote keys land here (see onPreviewKeyEvent). Full-screen
+    // only — in the windowed pane this would steal focus from the channel list.
+    LaunchedEffect(isTv, fullScreen, controlsVisible, current?.key) {
+        if (!isTv || !fullScreen || current == null) return@LaunchedEffect
         if (controlsVisible) {
             repeat(8) {
                 if (runCatching { playFocus.requestFocus() }.isSuccess) return@LaunchedEffect
@@ -204,9 +205,10 @@ fun PlayerContent(
                     }
                     Key.MediaNext, Key.ChannelUp -> { vm.zapNext(); wake(); true }
                     Key.MediaPrevious, Key.ChannelDown -> { vm.zapPrevious(); wake(); true }
-                    Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight,
-                    Key.DirectionCenter, Key.Enter,
-                    -> {
+                    // Classic TV zapping: with the controls hidden, up/down change channel directly.
+                    Key.DirectionUp -> if (!controlsVisible) { vm.zapNext(); true } else { wake(); false }
+                    Key.DirectionDown -> if (!controlsVisible) { vm.zapPrevious(); true } else { wake(); false }
+                    Key.DirectionLeft, Key.DirectionRight, Key.DirectionCenter, Key.Enter -> {
                         val wasHidden = !controlsVisible
                         wake()
                         wasHidden   // consume only when the press merely revealed hidden controls
