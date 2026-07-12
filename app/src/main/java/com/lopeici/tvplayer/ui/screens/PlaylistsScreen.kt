@@ -54,6 +54,7 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
     var showAddUrl by remember { mutableStateOf(false) }
     var epgFor by remember { mutableStateOf<Playlist?>(null) }
     var editing by remember { mutableStateOf<Playlist?>(null) }
+    var deleting by remember { mutableStateOf<Playlist?>(null) }
 
     editing?.let { playlist ->
         // Full-screen show/hide editor replaces the tab content while open.
@@ -117,7 +118,7 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
                         onEdit = { editing = playlist },
                         onRefresh = { vm.refreshPlaylist(playlist.id) },
                         onSetEpg = { epgFor = playlist },
-                        onDelete = { vm.deletePlaylist(playlist.id) },
+                        onDelete = { deleting = playlist },
                     )
                 }
             }
@@ -140,6 +141,18 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
             onSave = { epgUrl -> vm.setEpgUrl(playlist.id, epgUrl); epgFor = null },
             onRefresh = { vm.refreshEpg(playlist.id); epgFor = null },
             onDismiss = { epgFor = null },
+        )
+    }
+
+    deleting?.let { playlist ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete playlist?") },
+            text = { Text("\"${playlist.name}\" and its channels, favorites and guide will be removed.") },
+            confirmButton = {
+                TextButton(onClick = { vm.deletePlaylist(playlist.id); deleting = null }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
         )
     }
 }
