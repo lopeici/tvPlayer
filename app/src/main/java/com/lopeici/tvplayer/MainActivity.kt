@@ -24,6 +24,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.lopeici.tvplayer.ui.TvApp
 import com.lopeici.tvplayer.ui.TvViewModel
+import com.lopeici.tvplayer.ui.components.isTelevision
 import com.lopeici.tvplayer.ui.theme.TvPlayerTheme
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -38,9 +39,7 @@ class MainActivity : AppCompatActivity() {
     /** True when a channel is playing locally (not casting) so it can continue in PiP. */
     private var pipEligible = false
 
-    private val isTelevision: Boolean by lazy {
-        packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
-    }
+    private val isTelevision: Boolean by lazy { isTelevision() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
