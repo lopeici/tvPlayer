@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -48,6 +49,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -78,8 +80,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
+import java.util.Locale
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.CastButton
 import com.lopeici.tvplayer.ui.components.isTelevision
@@ -115,6 +123,7 @@ fun PlayerContent(
     val error by vm.playerError.collectAsStateWithLifecycle()
     val nowNext by vm.currentNowNext.collectAsStateWithLifecycle()
     val favorites by vm.favorites.collectAsStateWithLifecycle()
+    val tracks by vm.tracks.collectAsStateWithLifecycle()
     val nowProg = nowNext.first
     val nextProg = nowNext.second
 
@@ -122,6 +131,9 @@ fun PlayerContent(
     var wakeNonce by remember { mutableStateOf(0) }
     var showJump by remember { mutableStateOf(false) }
     var showGuide by remember { mutableStateOf(false) }
+    var showTracks by remember { mutableStateOf(false) }
+    val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+    val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
     val scrim = Color.Black.copy(alpha = 0.45f)
 
     val context = LocalContext.current
@@ -374,6 +386,12 @@ fun PlayerContent(
                         tint = if (isFav) MaterialTheme.colorScheme.primary else Color.White,
                     )
                 }
+                // Only offered when there is something to choose (several audio tracks or subtitles).
+                if (audioGroups.sumOf { it.length } > 1 || textGroups.isNotEmpty()) {
+                    IconButton(onClick = { showTracks = true }, modifier = Modifier.tvFocusHighlight()) {
+                        Icon(Icons.Filled.Subtitles, contentDescription = "Audio & subtitles", tint = Color.White)
+                    }
+                }
                 IconButton(onClick = { showGuide = true }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.Schedule, contentDescription = "TV guide", tint = Color.White)
                 }
@@ -383,6 +401,17 @@ fun PlayerContent(
             }
             }
         }
+    }
+
+    if (showTracks) {
+        TrackSelectionDialog(
+            audioGroups = audioGroups,
+            textGroups = textGroups,
+            onSelectTrack = { group, index -> vm.selectTrack(group, index) },
+            onAutoAudio = { vm.autoAudio() },
+            onSubtitlesOff = { vm.disableSubtitles() },
+            onDismiss = { showTracks = false },
+        )
     }
 
     if (showJump) {
@@ -436,6 +465,84 @@ fun PlayerContent(
             }
         }
     }
+}
+
+/** Picker for the stream's audio languages and subtitle tracks. Rows are focusable for TV. */
+@Composable
+private fun TrackSelectionDialog(
+    audioGroups: List<Tracks.Group>,
+    textGroups: List<Tracks.Group>,
+    onSelectTrack: (Tracks.Group, Int) -> Unit,
+    onAutoAudio: () -> Unit,
+    onSubtitlesOff: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Audio & subtitles") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (audioGroups.isNotEmpty()) {
+                    Text(
+                        "Audio",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                    TrackRow("Auto", selected = false) { onAutoAudio(); onDismiss() }
+                    audioGroups.forEach { group ->
+                        for (i in 0 until group.length) {
+                            if (!group.isTrackSupported(i)) continue
+                            TrackRow(group.getTrackFormat(i).trackLabel(i), group.isTrackSelected(i)) {
+                                onSelectTrack(group, i); onDismiss()
+                            }
+                        }
+                    }
+                }
+                if (textGroups.isNotEmpty()) {
+                    Text(
+                        "Subtitles",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                    val anyTextSelected = textGroups.any { g -> (0 until g.length).any { g.isTrackSelected(it) } }
+                    TrackRow("Off", selected = !anyTextSelected) { onSubtitlesOff(); onDismiss() }
+                    textGroups.forEach { group ->
+                        for (i in 0 until group.length) {
+                            if (!group.isTrackSupported(i)) continue
+                            TrackRow(group.getTrackFormat(i).trackLabel(i), group.isTrackSelected(i)) {
+                                onSelectTrack(group, i); onDismiss()
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun TrackRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
+/** Human-readable track name: explicit label, else the language name, else a numbered fallback. */
+private fun Format.trackLabel(index: Int): String {
+    label?.takeIf { it.isNotBlank() }?.let { return it }
+    language?.takeIf { it.isNotBlank() && it != C.LANGUAGE_UNDETERMINED }?.let { lang ->
+        val display = Locale.forLanguageTag(lang).displayLanguage
+        if (display.isNotBlank()) return display.replaceFirstChar { it.uppercase() }
+        return lang
+    }
+    return "Track ${index + 1}"
 }
 
 @Composable

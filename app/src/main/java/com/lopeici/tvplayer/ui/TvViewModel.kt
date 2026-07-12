@@ -3,6 +3,7 @@ package com.lopeici.tvplayer.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.Tracks
 import com.lopeici.tvplayer.TvPlayerApp
 import com.lopeici.tvplayer.data.Channel
 import com.lopeici.tvplayer.data.Programme
@@ -36,6 +37,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     val isCasting = playerManager.isCasting
     val playerError = playerManager.error
     val castAsHls = repo.castAsHls
+    val tracks = playerManager.tracks
 
     // Ticks roughly every 30s so "now playing" advances over time.
     private val nowTick: StateFlow<Long> = flow {
@@ -186,6 +188,12 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     fun zapPrevious() = playerManager.previous()
     fun togglePlayPause() = playerManager.togglePlayPause()
     fun retry() = playerManager.retry()
+
+    // ---- Track selection (audio languages / subtitles) ----
+
+    fun selectTrack(group: Tracks.Group, trackIndex: Int) = playerManager.selectTrack(group, trackIndex)
+    fun autoAudio() = playerManager.clearAudioOverride()
+    fun disableSubtitles() = playerManager.disableTextTracks()
 
     /** Jump to a 1-based channel number within the current queue. */
     fun jumpToNumber(number: Int) {

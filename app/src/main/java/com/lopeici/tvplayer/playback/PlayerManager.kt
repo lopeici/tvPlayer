@@ -11,6 +11,8 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import com.google.android.gms.cast.framework.CastContext
@@ -66,6 +68,10 @@ class PlayerManager(context: Context) {
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
+    /** Track groups of the current stream (audio languages, subtitles, …). */
+    private val _tracks = MutableStateFlow(Tracks.EMPTY)
+    val tracks = _tracks.asStateFlow()
+
     init {
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) { _isPlaying.value = isPlaying }
@@ -76,6 +82,7 @@ class PlayerManager(context: Context) {
             override fun onDeviceInfoChanged(deviceInfo: DeviceInfo) {
                 _isCasting.value = deviceInfo.playbackType == DeviceInfo.PLAYBACK_TYPE_REMOTE
             }
+            override fun onTracksChanged(tracks: Tracks) { _tracks.value = tracks }
             override fun onPlayerError(error: PlaybackException) {
                 _error.value = friendlyError(error)
             }
@@ -118,6 +125,29 @@ class PlayerManager(context: Context) {
     }
 
     fun clearError() { _error.value = null }
+
+    /** Force a specific audio/subtitle track of the current stream. */
+    fun selectTrack(group: Tracks.Group, trackIndex: Int) {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(group.type, false)
+            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, trackIndex))
+            .build()
+    }
+
+    /** Back to automatic audio selection. */
+    fun clearAudioOverride() {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+            .build()
+    }
+
+    /** Turn subtitles off. */
+    fun disableTextTracks() {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            .build()
+    }
 
     fun release() {
         if (player !== exoPlayer) player.release()
