@@ -87,9 +87,11 @@ private fun WideLayout(vm: TvViewModel, onImportFile: () -> Unit) {
     var listVisible by remember { mutableStateOf(true) }
     var playerFullScreen by remember { mutableStateOf(false) }
     val onPlay: (Channel, List<Channel>) -> Unit = { channel, queue ->
+        // On a TV, the first channel selection goes full-screen immediately (no fiddly maximize
+        // button to reach). If the player is already active in the windowed pane, stay windowed.
+        val wasIdle = vm.currentChannel.value == null
         vm.play(channel, queue)
-        // On a TV, selecting a channel goes full-screen immediately (no fiddly maximize button to reach).
-        if (isTv) playerFullScreen = true
+        if (isTv && wasIdle) playerFullScreen = true
     }
 
     if (playerFullScreen) {
