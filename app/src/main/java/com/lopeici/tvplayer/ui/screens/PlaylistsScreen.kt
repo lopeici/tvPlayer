@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
@@ -24,7 +25,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -42,6 +43,8 @@ import com.lopeici.tvplayer.data.Playlist
 import com.lopeici.tvplayer.data.PlaylistSource
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.EmptyState
+import com.lopeici.tvplayer.ui.components.TvTextField
+import com.lopeici.tvplayer.ui.components.isTelevision
 
 @Composable
 fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
@@ -52,6 +55,14 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
     val castAsHls by vm.castAsHls.collectAsStateWithLifecycle()
     var showAddUrl by remember { mutableStateOf(false) }
     var epgFor by remember { mutableStateOf<Playlist?>(null) }
+    var editing by remember { mutableStateOf<Playlist?>(null) }
+    var deleting by remember { mutableStateOf<Playlist?>(null) }
+
+    editing?.let { playlist ->
+        // Full-screen show/hide editor replaces the tab content while open.
+        PlaylistEditScreen(vm, playlist, onClose = { editing = null })
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -68,19 +79,22 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
             }
         }
 
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Cast in HLS", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    "Casts each channel's .m3u8 version (needed for Chromecast); local playback is unchanged.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        // Casting doesn't exist on a TV (the TV is the display), so hide the cast setting there.
+        if (!LocalContext.current.isTelevision()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Cast in HLS", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Casts each channel's .m3u8 version (needed for Chromecast); local playback is unchanged.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = castAsHls, onCheckedChange = { vm.setCastAsHls(it) })
             }
-            Switch(checked = castAsHls, onCheckedChange = { vm.setCastAsHls(it) })
         }
 
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -106,9 +120,10 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
                         playlist = playlist,
                         isActive = playlist.id == activeId,
                         onActivate = { vm.setActivePlaylist(playlist.id) },
+                        onEdit = { editing = playlist },
                         onRefresh = { vm.refreshPlaylist(playlist.id) },
                         onSetEpg = { epgFor = playlist },
-                        onDelete = { vm.deletePlaylist(playlist.id) },
+                        onDelete = { deleting = playlist },
                     )
                 }
             }
@@ -133,6 +148,18 @@ fun PlaylistsScreen(vm: TvViewModel, onImportFile: () -> Unit) {
             onDismiss = { epgFor = null },
         )
     }
+
+    deleting?.let { playlist ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete playlist?") },
+            text = { Text("\"${playlist.name}\" and its channels, favorites and guide will be removed.") },
+            confirmButton = {
+                TextButton(onClick = { vm.deletePlaylist(playlist.id); deleting = null }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+        )
+    }
 }
 
 @Composable
@@ -140,6 +167,7 @@ private fun PlaylistRow(
     playlist: Playlist,
     isActive: Boolean,
     onActivate: () -> Unit,
+    onEdit: () -> Unit,
     onRefresh: () -> Unit,
     onSetEpg: () -> Unit,
     onDelete: () -> Unit,
@@ -171,6 +199,9 @@ private fun PlaylistRow(
         },
         trailingContent = {
             Row {
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Edit channels (show/hide)")
+                }
                 IconButton(onClick = onSetEpg) {
                     Icon(
                         Icons.Filled.Schedule,
@@ -196,27 +227,24 @@ private fun AddUrlDialog(onConfirm: (String, String, String?) -> Unit, onDismiss
         title = { Text("Add playlist URL") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+                TvTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Name (optional)") },
-                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                TvTextField(
                     value = url,
                     onValueChange = { url = it },
                     label = { Text("M3U URL") },
                     placeholder = { Text("http://...") },
-                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                TvTextField(
                     value = epgUrl,
                     onValueChange = { epgUrl = it },
                     label = { Text("EPG / XMLTV URL (optional)") },
                     placeholder = { Text("http://...xmltv.xml") },
-                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -250,12 +278,11 @@ private fun EpgUrlDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedTextField(
+                TvTextField(
                     value = epgUrl,
                     onValueChange = { epgUrl = it },
                     label = { Text("XMLTV URL") },
                     placeholder = { Text("http://...xmltv.xml(.gz)") },
-                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (playlist.epgUrl != null) {

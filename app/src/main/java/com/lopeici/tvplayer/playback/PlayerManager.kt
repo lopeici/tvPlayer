@@ -3,12 +3,16 @@ package com.lopeici.tvplayer.playback
 import android.content.Context
 import androidx.core.net.toUri
 import androidx.media3.cast.CastPlayer
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.DeviceInfo
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import com.google.android.gms.cast.framework.CastContext
@@ -32,6 +36,15 @@ class PlayerManager(context: Context) {
     private val exoPlayer: ExoPlayer = ExoPlayer.Builder(context)
         .setLoadControl(loadControl)
         .setHandleAudioBecomingNoisy(true)
+        // Take audio focus as movie/media playback: pauses when another app (or the voice
+        // assistant) takes focus, and stops playing over other apps' audio.
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                .build(),
+            true,
+        )
         .build()
 
     /** The player the UI binds to. CastPlayer auto-switches between local and remote. */
@@ -55,6 +68,10 @@ class PlayerManager(context: Context) {
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
+    /** Track groups of the current stream (audio languages, subtitles, …). */
+    private val _tracks = MutableStateFlow(Tracks.EMPTY)
+    val tracks = _tracks.asStateFlow()
+
     init {
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) { _isPlaying.value = isPlaying }
@@ -65,6 +82,7 @@ class PlayerManager(context: Context) {
             override fun onDeviceInfoChanged(deviceInfo: DeviceInfo) {
                 _isCasting.value = deviceInfo.playbackType == DeviceInfo.PLAYBACK_TYPE_REMOTE
             }
+            override fun onTracksChanged(tracks: Tracks) { _tracks.value = tracks }
             override fun onPlayerError(error: PlaybackException) {
                 _error.value = friendlyError(error)
             }
@@ -77,7 +95,7 @@ class PlayerManager(context: Context) {
     fun play(channels: List<Channel>, startIndex: Int, castHls: Boolean = false) {
         if (channels.isEmpty()) return
         val idx = startIndex.coerceIn(0, channels.lastIndex)
-        player.setMediaItems(channels.map { it.toMediaItem(castHls) }, idx, 0L)
+        player.setMediaItems(channels.map { it.toMediaItem(castHls, _isCasting.value) }, idx, 0L)
         player.playWhenReady = true
         player.prepare()
     }
@@ -93,6 +111,13 @@ class PlayerManager(context: Context) {
     fun previous() = player.run { if (hasPreviousMediaItem()) seekToPreviousMediaItem() }
     fun togglePlayPause() = player.run { if (isPlaying) pause() else play() }
 
+    /** Fully stop the stream and clear the queue — nothing is "now playing" afterwards. */
+    fun stop() {
+        _error.value = null
+        player.stop()
+        player.clearMediaItems()
+    }
+
     fun retry() {
         _error.value = null
         player.prepare()
@@ -100,6 +125,29 @@ class PlayerManager(context: Context) {
     }
 
     fun clearError() { _error.value = null }
+
+    /** Force a specific audio/subtitle track of the current stream. */
+    fun selectTrack(group: Tracks.Group, trackIndex: Int) {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(group.type, false)
+            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, trackIndex))
+            .build()
+    }
+
+    /** Back to automatic audio selection. */
+    fun clearAudioOverride() {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+            .build()
+    }
+
+    /** Turn subtitles off. */
+    fun disableTextTracks() {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            .build()
+    }
 
     fun release() {
         if (player !== exoPlayer) player.release()
@@ -109,7 +157,7 @@ class PlayerManager(context: Context) {
     private fun friendlyError(e: PlaybackException): String =
         "Can't play this channel (${e.errorCodeName}). It may be offline."
 
-    private fun Channel.toMediaItem(castHls: Boolean): MediaItem {
+    private fun Channel.toMediaItem(castHls: Boolean, casting: Boolean): MediaItem {
         // For casting, optionally use the HLS variant (a stock Chromecast can't play raw mpegts).
         val streamUrl = if (castHls) hlsVariant(url) else url
         // A MIME type is required for Chromecast: the Cast receiver needs a contentType, and
@@ -121,7 +169,11 @@ class PlayerManager(context: Context) {
             path.endsWith(".ts") -> MimeTypes.VIDEO_MP2T
             path.endsWith(".mp4") -> MimeTypes.VIDEO_MP4
             path.endsWith(".mkv") -> MimeTypes.VIDEO_MATROSKA
-            else -> MimeTypes.APPLICATION_M3U8 // most IPTV streams are HLS; a sensible default for casting
+            // Extensionless (Xtream-style) URLs usually serve raw mpegts. Locally the MIME must
+            // stay null so ExoPlayer sniffs the container; forcing HLS here breaks playback with
+            // ERROR_CODE_PARSING_MANIFEST_MALFORMED. When casting, a contentType is mandatory and
+            // HLS is the only shape a stock receiver can play anyway.
+            else -> if (casting) MimeTypes.APPLICATION_M3U8 else null
         }
         return MediaItem.Builder()
             .setUri(streamUrl)

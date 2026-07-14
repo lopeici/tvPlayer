@@ -2,6 +2,7 @@ package com.lopeici.tvplayer.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -24,11 +25,15 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -38,6 +43,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lopeici.tvplayer.data.Channel
 import com.lopeici.tvplayer.ui.components.MiniPlayer
@@ -87,9 +95,42 @@ private fun WideLayout(vm: TvViewModel, onImportFile: () -> Unit) {
     var listVisible by remember { mutableStateOf(true) }
     var playerFullScreen by remember { mutableStateOf(false) }
     val onPlay: (Channel, List<Channel>) -> Unit = { channel, queue ->
+        // On a TV, the first channel selection goes full-screen immediately (no fiddly maximize
+        // button to reach). If the player is already active in the windowed pane, stay windowed.
+        val wasIdle = vm.currentChannel.value == null
         vm.play(channel, queue)
-        // On a TV, selecting a channel goes full-screen immediately (no fiddly maximize button to reach).
-        if (isTv) playerFullScreen = true
+        if (isTv && wasIdle) playerFullScreen = true
+    }
+
+    // TV tunes back into the last watched channel whenever the app comes to the foreground idle
+    // (playback is killed on exit there, so this is the "TV remembers its channel" behavior).
+    if (isTv) {
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val recents by vm.recentChannels.collectAsStateWithLifecycle()
+        val visible by vm.visibleChannels.collectAsStateWithLifecycle()
+        var resumeRequested by remember { mutableStateOf(false) }
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_START && vm.currentChannel.value == null) {
+                    resumeRequested = true
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        // Waits for the persisted recents + channel list to load on a cold start.
+        LaunchedEffect(resumeRequested, recents, visible) {
+            if (!resumeRequested) return@LaunchedEffect
+            if (vm.currentChannel.value != null) {
+                resumeRequested = false
+                return@LaunchedEffect
+            }
+            if (recents.isNotEmpty() && visible.isNotEmpty()) {
+                resumeRequested = false
+                vm.play(recents.first(), visible)
+                playerFullScreen = true
+            }
+        }
     }
 
     if (playerFullScreen) {
@@ -112,7 +153,25 @@ private fun WideLayout(vm: TvViewModel, onImportFile: () -> Unit) {
             }
         }
         if (listVisible) {
-            Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding()) {
+            // On TV, fence vertical D-pad movement inside the list pane: while a LazyColumn
+            // scrolls, the next row may not be composed yet and the geometric focus search would
+            // otherwise jump into the player pane. Left/right still reach the rail and player.
+            val fenceVertical = if (isTv) {
+                Modifier
+                    .focusProperties {
+                        onExit = {
+                            if (requestedFocusDirection == FocusDirection.Up ||
+                                requestedFocusDirection == FocusDirection.Down
+                            ) {
+                                cancelFocusChange()
+                            }
+                        }
+                    }
+                    .focusGroup()
+            } else {
+                Modifier
+            }
+            Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding().then(fenceVertical)) {
                 when (selected) {
                     Tab.Channels -> ChannelsScreen(vm, onPlay)
                     Tab.Favorites -> FavoritesScreen(vm, onPlay)
@@ -156,6 +215,7 @@ private fun CompactLayout(vm: TvViewModel, onImportFile: () -> Unit) {
                         nowTitle = nowNext.first?.title,
                         isPlaying = isPlaying,
                         onPlayPause = { vm.togglePlayPause() },
+                        onStop = { vm.stop() },
                         onClick = { navController.navigate(ROUTE_PLAYER) { launchSingleTop = true } },
                     )
                 }

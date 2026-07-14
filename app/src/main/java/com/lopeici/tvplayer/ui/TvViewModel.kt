@@ -3,6 +3,8 @@ package com.lopeici.tvplayer.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.Tracks
+import androidx.media3.ui.AspectRatioFrameLayout
 import com.lopeici.tvplayer.TvPlayerApp
 import com.lopeici.tvplayer.data.Channel
 import com.lopeici.tvplayer.data.Programme
@@ -36,6 +38,18 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     val isCasting = playerManager.isCasting
     val playerError = playerManager.error
     val castAsHls = repo.castAsHls
+    val tracks = playerManager.tracks
+
+    /** Video scaling: fit (letterbox) → zoom (crop) → fill (stretch). Session-scoped. */
+    val resizeMode = MutableStateFlow(AspectRatioFrameLayout.RESIZE_MODE_FIT)
+
+    fun cycleResizeMode() {
+        resizeMode.value = when (resizeMode.value) {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+            else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+        }
+    }
 
     // Ticks roughly every 30s so "now playing" advances over time.
     private val nowTick: StateFlow<Long> = flow {
@@ -46,24 +60,39 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     val searchQuery = MutableStateFlow("")
     val selectedGroup = MutableStateFlow<String?>(null)
 
-    val groups: StateFlow<List<String>> = channels
-        .map { list -> list.mapNotNull { it.group }.distinct().sorted() }
+    /** When on, search results also include user-hidden channels. Off by default; only applies while searching. */
+    val searchHidden = MutableStateFlow(false)
+
+    /** Per-playlist hidden groups/channels (edited via the playlist editor). */
+    val hidden = repo.hidden
+
+    // Channels minus user-hidden ones — everything the browsing UI shows derives from this.
+    private val shownChannels: StateFlow<List<Channel>> =
+        combine(channels, repo.hidden) { list, hidden ->
+            if (hidden.isEmpty()) list
+            else list.filterNot { ch -> hidden[ch.playlistId]?.isHidden(ch) == true }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val groups: StateFlow<List<String>> = shownChannels
+        .map { list -> list.mapNotNull { it.group }.distinct().sortedBy { it.lowercase() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val visibleChannels: StateFlow<List<Channel>> =
-        combine(channels, searchQuery, selectedGroup) { list, query, group ->
+        combine(channels, repo.hidden, searchQuery, selectedGroup, searchHidden) { list, hidden, query, group, withHidden ->
+            val includeHidden = withHidden && query.isNotBlank()
             list.filter { ch ->
-                (group == null || ch.group == group) &&
+                (includeHidden || hidden[ch.playlistId]?.isHidden(ch) != true) &&
+                    (group == null || ch.group == group) &&
                     (query.isBlank() || ch.name.contains(query, ignoreCase = true))
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val favoriteChannels: StateFlow<List<Channel>> =
-        combine(channels, favorites) { list, favs -> list.filter { it.key in favs } }
+        combine(shownChannels, favorites) { list, favs -> list.filter { it.key in favs } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val recentChannels: StateFlow<List<Channel>> =
-        combine(channels, repo.recents) { list, recents ->
+        combine(shownChannels, repo.recents) { list, recents ->
             recents.mapNotNull { key -> list.firstOrNull { it.key == key } }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -111,6 +140,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSearch(value: String) { searchQuery.value = value }
     fun setGroup(value: String?) { selectedGroup.value = value }
+    fun setSearchHidden(value: Boolean) { searchHidden.value = value }
 
     fun isFavorite(channel: Channel): Boolean = channel.key in favorites.value
     fun toggleFavorite(channel: Channel) = viewModelScope.launch { repo.toggleFavorite(channel) }
@@ -126,6 +156,21 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     fun deletePlaylist(id: String) = viewModelScope.launch { repo.deletePlaylist(id) }
     fun setEpgUrl(id: String, epgUrl: String?) = viewModelScope.launch { repo.setEpgUrl(id, epgUrl) }
     fun refreshEpg(id: String) = viewModelScope.launch { repo.refreshEpg(id) }
+
+    // ---- Playlist editor (hide/show) ----
+
+    /** All channels of a playlist, including hidden ones (the editor lists everything). */
+    suspend fun channelsOf(playlistId: String): List<Channel> = repo.channelsFor(playlistId)
+
+    fun setChannelHidden(channel: Channel, hidden: Boolean) =
+        viewModelScope.launch { repo.setChannelHidden(channel, hidden) }
+
+    /** Hide/show a whole group; `group == null` is the "no group" bucket (bulk individual hide). */
+    fun setGroupHidden(playlistId: String, group: String?, urlsInGroup: Collection<String>, hidden: Boolean) =
+        viewModelScope.launch {
+            if (group == null) repo.setChannelsHidden(playlistId, urlsInGroup, hidden)
+            else repo.setGroupHidden(playlistId, group, urlsInGroup, hidden)
+        }
 
     /** Upcoming programmes (incl. current) for a channel's tvg-id. */
     fun scheduleFor(tvgId: String?): List<Programme> {
@@ -145,10 +190,22 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repo.recordRecent(channel) }
     }
 
+    /** Stop the stream entirely; clearing the queue also keeps the cast watcher from restarting it. */
+    fun stop() {
+        queue.value = emptyList()
+        playerManager.stop()
+    }
+
     fun zapNext() = playerManager.next()
     fun zapPrevious() = playerManager.previous()
     fun togglePlayPause() = playerManager.togglePlayPause()
     fun retry() = playerManager.retry()
+
+    // ---- Track selection (audio languages / subtitles) ----
+
+    fun selectTrack(group: Tracks.Group, trackIndex: Int) = playerManager.selectTrack(group, trackIndex)
+    fun autoAudio() = playerManager.clearAudioOverride()
+    fun disableSubtitles() = playerManager.disableTextTracks()
 
     /** Jump to a 1-based channel number within the current queue. */
     fun jumpToNumber(number: Int) {

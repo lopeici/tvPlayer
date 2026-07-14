@@ -25,7 +25,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuOpen
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Menu
@@ -35,15 +38,19 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -74,8 +81,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
+import androidx.media3.ui.AspectRatioFrameLayout
+import java.util.Locale
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.CastButton
 import com.lopeici.tvplayer.ui.components.isTelevision
@@ -110,6 +124,9 @@ fun PlayerContent(
     val playbackState by vm.playerManager.playbackState.collectAsStateWithLifecycle()
     val error by vm.playerError.collectAsStateWithLifecycle()
     val nowNext by vm.currentNowNext.collectAsStateWithLifecycle()
+    val favorites by vm.favorites.collectAsStateWithLifecycle()
+    val tracks by vm.tracks.collectAsStateWithLifecycle()
+    val resizeMode by vm.resizeMode.collectAsStateWithLifecycle()
     val nowProg = nowNext.first
     val nextProg = nowNext.second
 
@@ -117,6 +134,9 @@ fun PlayerContent(
     var wakeNonce by remember { mutableStateOf(0) }
     var showJump by remember { mutableStateOf(false) }
     var showGuide by remember { mutableStateOf(false) }
+    var showTracks by remember { mutableStateOf(false) }
+    val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+    val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
     val scrim = Color.Black.copy(alpha = 0.45f)
 
     val context = LocalContext.current
@@ -139,9 +159,10 @@ fun PlayerContent(
     LaunchedEffect(current?.key) { if (current != null) wake() }
 
     // On a TV there is no touch: while the controls are visible keep D-pad focus on them; while hidden,
-    // park focus on the root surface so the first remote key press brings them back (see onPreviewKeyEvent).
-    LaunchedEffect(isTv, controlsVisible, current?.key) {
-        if (!isTv || current == null) return@LaunchedEffect
+    // park focus on the root surface so remote keys land here (see onPreviewKeyEvent). Full-screen
+    // only — in the windowed pane this would steal focus from the channel list.
+    LaunchedEffect(isTv, fullScreen, controlsVisible, current?.key) {
+        if (!isTv || !fullScreen || current == null) return@LaunchedEffect
         if (controlsVisible) {
             repeat(8) {
                 if (runCatching { playFocus.requestFocus() }.isSuccess) return@LaunchedEffect
@@ -152,7 +173,10 @@ fun PlayerContent(
         }
     }
 
-    PlayerWindowEffects(hideBars = fullScreen)
+    PlayerWindowEffects(
+        hideBars = fullScreen,
+        keepAwake = isPlaying || playbackState == Player.STATE_BUFFERING,
+    )
 
     // In the side pane, show a hint until something is playing.
     if (!fullScreen && current == null) {
@@ -178,21 +202,33 @@ fun PlayerContent(
 
     // Touch: tap toggles the controls. TV: a focusable surface catches D-pad keys even while the
     // controls are hidden, so the first press reveals them (and is consumed) rather than being lost.
+    // TV remote media keys (play/pause, stop, next/previous, channel up/down) act directly.
     val platformInteraction = if (isTv) {
         Modifier
             .focusRequester(rootFocus)
             .focusable()
             .onPreviewKeyEvent { event ->
-                val k = event.key
-                val isDpad = k == Key.DirectionUp || k == Key.DirectionDown ||
-                    k == Key.DirectionLeft || k == Key.DirectionRight ||
-                    k == Key.DirectionCenter || k == Key.Enter
-                if (event.type == KeyEventType.KeyDown && isDpad && current != null) {
-                    val wasHidden = !controlsVisible
-                    wake()
-                    wasHidden   // consume only when the press merely revealed hidden controls
-                } else {
-                    false       // never swallow Back etc. — let the system handle them
+                if (event.type != KeyEventType.KeyDown || current == null) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+                        vm.togglePlayPause(); wake(); true
+                    }
+                    Key.MediaStop -> {
+                        vm.stop()
+                        if (fullScreen) (onBack ?: onToggleFullScreen)?.invoke()
+                        true
+                    }
+                    Key.MediaNext, Key.ChannelUp -> { vm.zapNext(); wake(); true }
+                    Key.MediaPrevious, Key.ChannelDown -> { vm.zapPrevious(); wake(); true }
+                    // Classic TV zapping: with the controls hidden, up/down change channel directly.
+                    Key.DirectionUp -> if (!controlsVisible) { vm.zapNext(); true } else { wake(); false }
+                    Key.DirectionDown -> if (!controlsVisible) { vm.zapPrevious(); true } else { wake(); false }
+                    Key.DirectionLeft, Key.DirectionRight, Key.DirectionCenter, Key.Enter -> {
+                        val wasHidden = !controlsVisible
+                        wake()
+                        wasHidden   // consume only when the press merely revealed hidden controls
+                    }
+                    else -> false   // never swallow Back etc. — let the system handle them
                 }
             }
     } else {
@@ -208,7 +244,11 @@ fun PlayerContent(
             .then(pointerWake)
             .then(platformInteraction),
     ) {
-        PlayerSurface(player = vm.playerManager.player, modifier = Modifier.fillMaxSize())
+        PlayerSurface(
+            player = vm.playerManager.player,
+            modifier = Modifier.fillMaxSize(),
+            resizeMode = resizeMode,
+        )
 
         if (playbackState == Player.STATE_BUFFERING) {
             CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
@@ -325,11 +365,54 @@ fun PlayerContent(
                         tint = Color.White,
                     )
                 }
+                IconButton(
+                    onClick = {
+                        vm.stop()
+                        // Nothing is playing anymore: leave the full-screen player (back on the
+                        // phone route; back to the two-pane layout on tablet).
+                        if (fullScreen) (onBack ?: onToggleFullScreen)?.invoke()
+                    },
+                    modifier = Modifier.tvFocusHighlight(),
+                ) {
+                    Icon(Icons.Filled.Stop, contentDescription = "Stop", tint = Color.White)
+                }
                 IconButton(onClick = { vm.zapNext() }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.SkipNext, contentDescription = "Next channel", tint = Color.White)
                 }
                 IconButton(onClick = { vm.retry() }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.Refresh, contentDescription = "Refresh channel", tint = Color.White)
+                }
+                IconButton(
+                    onClick = { current?.let { vm.toggleFavorite(it) } },
+                    modifier = Modifier.tvFocusHighlight(),
+                ) {
+                    val isFav = current?.key?.let { it in favorites } == true
+                    Icon(
+                        if (isFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = if (isFav) "Remove favorite" else "Add favorite",
+                        tint = if (isFav) MaterialTheme.colorScheme.primary else Color.White,
+                    )
+                }
+                // Only offered when there is something to choose (several audio tracks or subtitles).
+                if (audioGroups.sumOf { it.length } > 1 || textGroups.isNotEmpty()) {
+                    IconButton(onClick = { showTracks = true }, modifier = Modifier.tvFocusHighlight()) {
+                        Icon(Icons.Filled.Subtitles, contentDescription = "Audio & subtitles", tint = Color.White)
+                    }
+                }
+                IconButton(onClick = { vm.cycleResizeMode() }, modifier = Modifier.tvFocusHighlight()) {
+                    Icon(
+                        Icons.Filled.AspectRatio,
+                        contentDescription = when (resizeMode) {
+                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Scaling: zoom (tap for stretch)"
+                            AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Scaling: stretch (tap for fit)"
+                            else -> "Scaling: fit (tap for zoom)"
+                        },
+                        tint = if (resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
+                            Color.White
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    )
                 }
                 IconButton(onClick = { showGuide = true }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(Icons.Filled.Schedule, contentDescription = "TV guide", tint = Color.White)
@@ -340,6 +423,17 @@ fun PlayerContent(
             }
             }
         }
+    }
+
+    if (showTracks) {
+        TrackSelectionDialog(
+            audioGroups = audioGroups,
+            textGroups = textGroups,
+            onSelectTrack = { group, index -> vm.selectTrack(group, index) },
+            onAutoAudio = { vm.autoAudio() },
+            onSubtitlesOff = { vm.disableSubtitles() },
+            onDismiss = { showTracks = false },
+        )
     }
 
     if (showJump) {
@@ -367,7 +461,20 @@ fun PlayerContent(
             } else {
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
                     items(schedule) { p ->
+                        // Rows are focusable so the D-pad can scroll the schedule on TV; the
+                        // focused row is tinted since there's no other focus indication.
+                        var focused by remember { mutableStateOf(false) }
                         ListItem(
+                            modifier = Modifier
+                                .onFocusChanged { focused = it.isFocused }
+                                .focusable(),
+                            colors = ListItemDefaults.colors(
+                                containerColor = if (focused) {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                } else {
+                                    ListItemDefaults.containerColor
+                                },
+                            ),
                             overlineContent = { Text(p.timeRange()) },
                             headlineContent = { Text(p.title) },
                             supportingContent = p.desc?.let {
@@ -380,6 +487,84 @@ fun PlayerContent(
             }
         }
     }
+}
+
+/** Picker for the stream's audio languages and subtitle tracks. Rows are focusable for TV. */
+@Composable
+private fun TrackSelectionDialog(
+    audioGroups: List<Tracks.Group>,
+    textGroups: List<Tracks.Group>,
+    onSelectTrack: (Tracks.Group, Int) -> Unit,
+    onAutoAudio: () -> Unit,
+    onSubtitlesOff: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Audio & subtitles") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (audioGroups.isNotEmpty()) {
+                    Text(
+                        "Audio",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                    TrackRow("Auto", selected = false) { onAutoAudio(); onDismiss() }
+                    audioGroups.forEach { group ->
+                        for (i in 0 until group.length) {
+                            if (!group.isTrackSupported(i)) continue
+                            TrackRow(group.getTrackFormat(i).trackLabel(i), group.isTrackSelected(i)) {
+                                onSelectTrack(group, i); onDismiss()
+                            }
+                        }
+                    }
+                }
+                if (textGroups.isNotEmpty()) {
+                    Text(
+                        "Subtitles",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                    val anyTextSelected = textGroups.any { g -> (0 until g.length).any { g.isTrackSelected(it) } }
+                    TrackRow("Off", selected = !anyTextSelected) { onSubtitlesOff(); onDismiss() }
+                    textGroups.forEach { group ->
+                        for (i in 0 until group.length) {
+                            if (!group.isTrackSupported(i)) continue
+                            TrackRow(group.getTrackFormat(i).trackLabel(i), group.isTrackSelected(i)) {
+                                onSelectTrack(group, i); onDismiss()
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun TrackRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
+/** Human-readable track name: explicit label, else the language name, else a numbered fallback. */
+private fun Format.trackLabel(index: Int): String {
+    label?.takeIf { it.isNotBlank() }?.let { return it }
+    language?.takeIf { it.isNotBlank() && it != C.LANGUAGE_UNDETERMINED }?.let { lang ->
+        val display = Locale.forLanguageTag(lang).displayLanguage
+        if (display.isNotBlank()) return display.replaceFirstChar { it.uppercase() }
+        return lang
+    }
+    return "Track ${index + 1}"
 }
 
 @Composable
@@ -407,13 +592,20 @@ private fun ChannelNumberDialog(onConfirm: (Int) -> Unit, onDismiss: () -> Unit)
     )
 }
 
-/** Keeps the screen on while the player is shown; hides the system bars only in full-screen. */
+/**
+ * Keeps the screen on while a channel is playing/buffering (not while idle on a list, so the
+ * screensaver can start); hides the system bars only in full-screen.
+ */
 @Composable
-private fun PlayerWindowEffects(hideBars: Boolean) {
+private fun PlayerWindowEffects(hideBars: Boolean, keepAwake: Boolean) {
     val view = LocalView.current
-    DisposableEffect(hideBars) {
+    DisposableEffect(hideBars, keepAwake) {
         val window = view.context.findActivity()?.window
-        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (keepAwake) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
         val controller = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
         if (hideBars) {
             controller?.apply {

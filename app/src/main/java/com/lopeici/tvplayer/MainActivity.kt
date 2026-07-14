@@ -24,6 +24,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.lopeici.tvplayer.ui.TvApp
 import com.lopeici.tvplayer.ui.TvViewModel
+import com.lopeici.tvplayer.ui.components.isTelevision
 import com.lopeici.tvplayer.ui.theme.TvPlayerTheme
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -38,9 +39,7 @@ class MainActivity : AppCompatActivity() {
     /** True when a channel is playing locally (not casting) so it can continue in PiP. */
     private var pipEligible = false
 
-    private val isTelevision: Boolean by lazy {
-        packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
-    }
+    private val isTelevision: Boolean by lazy { isTelevision() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -102,6 +101,14 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // On TV there is no PiP or casting, so leaving the app (Home / backing out) would keep the
+        // stream playing audio in the background. Kill playback entirely; the app reopens idle.
+        // Config changes don't pass through here (the Activity handles them via configChanges).
+        if (isTelevision) vm.stop()
     }
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
