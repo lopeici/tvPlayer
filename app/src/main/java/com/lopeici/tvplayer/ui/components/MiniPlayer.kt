@@ -22,9 +22,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.lopeici.tvplayer.R
 import com.lopeici.tvplayer.data.Channel
 
 /** "Now playing" bar shown above the bottom nav; tap it to return to the full player. */
@@ -77,11 +79,11 @@ fun MiniPlayer(
             IconButton(onClick = onPlayPause) {
                 Icon(
                     if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = "Play/Pause",
+                    contentDescription = stringResource(R.string.play_pause),
                 )
             }
             IconButton(onClick = onStop) {
-                Icon(Icons.Filled.Stop, contentDescription = "Stop")
+                Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.stop))
             }
         }
     }

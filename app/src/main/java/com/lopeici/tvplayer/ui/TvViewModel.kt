@@ -7,13 +7,20 @@ import androidx.media3.common.Tracks
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.lopeici.tvplayer.TvPlayerApp
 import com.lopeici.tvplayer.data.Channel
+import com.lopeici.tvplayer.data.EpgMode
 import com.lopeici.tvplayer.data.Programme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -51,8 +58,8 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // Ticks roughly every 30s so "now playing" advances over time.
-    private val nowTick: StateFlow<Long> = flow {
+    /** Ticks roughly every 30s so "now playing" (and its progress bar) advances over time. */
+    val nowTick: StateFlow<Long> = flow {
         while (true) { emit(System.currentTimeMillis()); delay(30_000) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), System.currentTimeMillis())
 
@@ -67,36 +74,44 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     val hidden = repo.hidden
 
     // Channels minus user-hidden ones — everything the browsing UI shows derives from this.
-    private val shownChannels: StateFlow<List<Channel>> =
+    val shownChannels: StateFlow<List<Channel>> =
         combine(channels, repo.hidden) { list, hidden ->
             if (hidden.isEmpty()) list
             else list.filterNot { ch -> hidden[ch.playlistId]?.isHidden(ch) == true }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val groups: StateFlow<List<String>> = shownChannels
         .map { list -> list.mapNotNull { it.group }.distinct().sortedBy { it.lowercase() } }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    // Filtering can cover tens of thousands of channels: run it off the main thread, and only once
+    // typing pauses (an emptied query applies at once, so clearing the search feels instant).
+    @OptIn(FlowPreview::class)
+    private val debouncedQuery = searchQuery.debounce { if (it.isEmpty()) 0L else 250L }
+
     val visibleChannels: StateFlow<List<Channel>> =
-        combine(channels, repo.hidden, searchQuery, selectedGroup, searchHidden) { list, hidden, query, group, withHidden ->
+        combine(channels, repo.hidden, debouncedQuery, selectedGroup, searchHidden) { list, hidden, query, group, withHidden ->
             val includeHidden = withHidden && query.isNotBlank()
             list.filter { ch ->
                 (includeHidden || hidden[ch.playlistId]?.isHidden(ch) != true) &&
                     (group == null || ch.group == group) &&
                     (query.isBlank() || ch.name.contains(query, ignoreCase = true))
             }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val favoriteChannels: StateFlow<List<Channel>> =
         combine(shownChannels, favorites) { list, favs -> list.filter { it.key in favs } }
+            .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val recentChannels: StateFlow<List<Channel>> =
         combine(shownChannels, repo.recents) { list, recents ->
-            recents.mapNotNull { key -> list.firstOrNull { it.key == key } }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+            val byKey = list.associateBy { it.key }
+            recents.mapNotNull { byKey[it] }
+        }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** The now-playing programme per XMLTV channel id (look up by Channel.tvgId). */
+    /** The now-playing programme per EPG key (look up by [Channel.epgKey]). */
     val currentProgrammes: StateFlow<Map<String, Programme>> =
         combine(repo.epg, nowTick) { epg, now ->
             buildMap {
@@ -106,34 +121,20 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
-    // Currently playing — derived from the player's active media id + the playback queue.
-    private val queue = MutableStateFlow<List<Channel>>(emptyList())
-    val currentChannel: StateFlow<Channel?> =
-        combine(playerManager.currentMediaId, queue) { id, q -> q.firstOrNull { it.key == id } }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    /** Currently playing (app-scoped, so it survives Activity recreation). */
+    val currentChannel: StateFlow<Channel?> = playerManager.current
 
     /** (now, next) programme for the channel currently on the player. */
     val currentNowNext: StateFlow<Pair<Programme?, Programme?>> =
         combine(currentChannel, repo.epg, nowTick) { channel, epg, now ->
-            val list = channel?.tvgId?.let { epg[it] }.orEmpty()
+            val list = channel?.epgKey?.let { epg[it] }.orEmpty()
             val nowProg = list.firstOrNull { now in it.start until it.stop }
             val nextProg = list.firstOrNull { it.start >= (nowProg?.stop ?: now) }
             nowProg to nextProg
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null to null)
 
     init {
-        // When casting starts/stops (or the HLS toggle changes) while a channel is open, reload the
-        // current channel so casting uses the HLS variant and local playback uses the original stream.
-        viewModelScope.launch {
-            combine(playerManager.isCasting, repo.castAsHls) { casting, hls -> casting && hls }
-                .collect { useHls ->
-                    val q = queue.value
-                    if (q.isNotEmpty()) {
-                        val idx = q.indexOfFirst { it.key == currentChannel.value?.key }.coerceAtLeast(0)
-                        playerManager.play(q, idx, castHls = useHls)
-                    }
-                }
-        }
+        viewModelScope.launch { crashLog.value = repo.crashLog() }
     }
 
     // ---- Actions ----
@@ -154,7 +155,8 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     fun setActivePlaylist(id: String) = viewModelScope.launch { repo.setActive(id) }
     fun refreshPlaylist(id: String) = viewModelScope.launch { repo.refresh(id) }
     fun deletePlaylist(id: String) = viewModelScope.launch { repo.deletePlaylist(id) }
-    fun setEpgUrl(id: String, epgUrl: String?) = viewModelScope.launch { repo.setEpgUrl(id, epgUrl) }
+    fun setEpgMode(id: String, mode: EpgMode, customUrl: String?) =
+        viewModelScope.launch { repo.setEpgMode(id, mode, customUrl) }
     fun refreshEpg(id: String) = viewModelScope.launch { repo.refreshEpg(id) }
 
     // ---- Playlist editor (hide/show) ----
@@ -172,29 +174,38 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
             else repo.setGroupHidden(playlistId, group, urlsInGroup, hidden)
         }
 
-    /** Upcoming programmes (incl. current) for a channel's tvg-id. */
-    fun scheduleFor(tvgId: String?): List<Programme> {
+    /** Upcoming programmes (incl. current) for a channel's [Channel.epgKey]. */
+    fun scheduleFor(epgKey: String?): List<Programme> {
         val now = System.currentTimeMillis()
-        return repo.scheduleFor(tvgId).filter { it.stop > now }
+        return repo.scheduleFor(epgKey).filter { it.stop > now }
     }
+
+    /** Called when the app comes to the foreground: refreshes a day-old playlist / stale guide. */
+    fun refreshIfStale() = repo.refreshIfStale()
 
     fun clearError() { repo.clearError(); playerManager.clearError() }
+
+    /** Text of the last crash log, or null when there is none (loaded once per ViewModel). */
+    val crashLog = MutableStateFlow<String?>(null)
+
+    fun clearCrashLog() = viewModelScope.launch {
+        repo.clearCrashLog()
+        crashLog.value = null
+    }
     fun setCastAsHls(value: Boolean) = repo.setCastAsHls(value)
 
-    /** Play [channel] within [queue] (used for next/previous zapping and channel-number jump). */
+    /**
+     * Play [channel] within [withinQueue] (used for next/previous zapping and channel-number jump).
+     * If the channel isn't in that queue it is put first, so it's always what starts playing.
+     */
     fun play(channel: Channel, withinQueue: List<Channel>) {
-        val q = withinQueue.ifEmpty { listOf(channel) }
-        queue.value = q
-        val idx = q.indexOfFirst { it.key == channel.key }.coerceAtLeast(0)
-        playerManager.play(q, idx, castHls = isCasting.value && repo.castAsHls.value)
-        viewModelScope.launch { repo.recordRecent(channel) }
+        val idx = withinQueue.indexOfFirst { it.key == channel.key }
+        if (idx >= 0) playerManager.play(withinQueue, idx)
+        else playerManager.play(listOf(channel) + withinQueue, 0)
     }
 
-    /** Stop the stream entirely; clearing the queue also keeps the cast watcher from restarting it. */
-    fun stop() {
-        queue.value = emptyList()
-        playerManager.stop()
-    }
+    /** Stop the stream entirely and clear the queue. */
+    fun stop() = playerManager.stop()
 
     fun zapNext() = playerManager.next()
     fun zapPrevious() = playerManager.previous()
@@ -207,13 +218,20 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     fun autoAudio() = playerManager.clearAudioOverride()
     fun disableSubtitles() = playerManager.disableTextTracks()
 
-    /** Jump to a 1-based channel number within the current queue. */
+    /**
+     * "Go to channel [number]". Playlists that number their channels (`tvg-chno`) are matched on
+     * that — first within the current queue, else anywhere in the (non-hidden) playlist. Playlists
+     * without numbers fall back to the 1-based position in the current queue.
+     */
     fun jumpToNumber(number: Int) {
-        val idx = number - 1
-        if (idx in queue.value.indices) {
-            playerManager.playIndex(idx)
-            viewModelScope.launch { repo.recordRecent(queue.value[idx]) }
-        }
+        val queue = playerManager.queue.value
+        val queueIdx = queue.indexOfFirst { it.number == number }
+        if (queueIdx >= 0) return playerManager.playIndex(queueIdx)
+        // Not shownChannels.value: that flow is only kept up to date while something collects it.
+        val hiddenState = repo.hidden.value
+        val shown = channels.value.filterNot { hiddenState[it.playlistId]?.isHidden(it) == true }
+        shown.firstOrNull { it.number == number }?.let { return play(it, queue) }
+        if (shown.none { it.number != null } && number - 1 in queue.indices) playerManager.playIndex(number - 1)
     }
 
     override fun onCleared() {

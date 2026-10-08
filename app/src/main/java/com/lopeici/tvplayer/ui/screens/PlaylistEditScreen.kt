@@ -34,19 +34,21 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lopeici.tvplayer.R
 import com.lopeici.tvplayer.data.Channel
 import com.lopeici.tvplayer.data.HiddenState
 import com.lopeici.tvplayer.data.Playlist
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.CenterProgress
 import com.lopeici.tvplayer.ui.components.EmptyState
+import com.lopeici.tvplayer.ui.components.LocalIsTelevision
 import com.lopeici.tvplayer.ui.components.SearchTextField
-import com.lopeici.tvplayer.ui.components.isTelevision
 
 /**
  * Full-screen editor to show/hide a playlist's channels. Groups are collapsible headers with a
@@ -64,8 +66,7 @@ fun PlaylistEditScreen(vm: TvViewModel, playlist: Playlist, onClose: () -> Unit)
     val hidden = hiddenMap[playlist.id] ?: HiddenState()
     var query by remember { mutableStateOf("") }
     val expanded = remember { mutableStateMapOf<String?, Boolean>() }
-    val context = LocalContext.current
-    val isTv = remember { context.isTelevision() }
+    val isTv = LocalIsTelevision.current
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -73,11 +74,11 @@ fun PlaylistEditScreen(vm: TvViewModel, playlist: Playlist, onClose: () -> Unit)
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onClose) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Done")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_done))
             }
             Column(Modifier.weight(1f)) {
                 Text(
-                    "Edit ${playlist.name}",
+                    stringResource(R.string.edit_playlist, playlist.name),
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -85,7 +86,7 @@ fun PlaylistEditScreen(vm: TvViewModel, playlist: Playlist, onClose: () -> Unit)
                 channels?.let { list ->
                     val shown = list.count { !hidden.isHidden(it) }
                     Text(
-                        "$shown of ${list.size} channels visible",
+                        pluralStringResource(R.plurals.channels_visible, list.size, shown, list.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -96,14 +97,14 @@ fun PlaylistEditScreen(vm: TvViewModel, playlist: Playlist, onClose: () -> Unit)
         SearchTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = "Search channels",
+            placeholder = stringResource(R.string.search_channels),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         )
 
         val list = channels
         when {
             list == null -> CenterProgress()
-            list.isEmpty() -> EmptyState("No channels", "Refresh this playlist first, then edit it.")
+            list.isEmpty() -> EmptyState(stringResource(R.string.empty_edit_title), stringResource(R.string.empty_edit_body))
             else -> {
                 // Toggling a group always applies to the *full* group, even while searching.
                 val fullGroups: Map<String?, List<Channel>> = remember(list) { list.groupBy { it.group } }
@@ -111,16 +112,17 @@ fun PlaylistEditScreen(vm: TvViewModel, playlist: Playlist, onClose: () -> Unit)
                 else list.filter { it.name.contains(query, ignoreCase = true) }
                 val searching = query.isNotBlank()
 
+                val noGroup = stringResource(R.string.no_group)
                 LazyColumn(Modifier.fillMaxSize()) {
                     val sortedGroups = filtered.groupBy { it.group }.entries
-                        .sortedBy { (group, _) -> (group ?: "No group").lowercase() }
+                        .sortedBy { (group, _) -> (group ?: noGroup).lowercase() }
                     sortedGroups.forEach { (group, visibleInGroup) ->
                         val all = fullGroups[group].orEmpty()
                         val shownCount = all.count { !hidden.isHidden(it) }
                         val isExpanded = searching || expanded[group] == true
                         item(key = "group:${group ?: "\u0000"}") {
                             GroupHeader(
-                                name = group ?: "No group",
+                                name = group ?: noGroup,
                                 matched = visibleInGroup.size,
                                 total = all.size,
                                 state = when (shownCount) {
@@ -206,14 +208,14 @@ private fun GroupHeader(
         if (tv) {
             Icon(
                 if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                contentDescription = if (expanded) "Collapse" else "Expand",
+                contentDescription = stringResource(if (expanded) R.string.action_collapse else R.string.action_expand),
                 modifier = Modifier.padding(12.dp),
             )
         } else {
             IconButton(onClick = onToggleExpand) {
                 Icon(
                     if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    contentDescription = stringResource(if (expanded) R.string.action_collapse else R.string.action_expand),
                 )
             }
         }

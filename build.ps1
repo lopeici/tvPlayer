@@ -6,7 +6,7 @@
 #
 # Usage:  .\build.ps1 assembleRelease
 #         .\build.ps1 assembleDebug
-#         .\build.ps1 testDebugUnitTest
+#         .\build.ps1 test
 param([Parameter(ValueFromRemainingArguments = $true)] $GradleArgs)
 
 $tmp = "D:\tmp"

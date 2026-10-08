@@ -1,3 +1,128 @@
 <resources>
     <string name="app_name">KaboomIPTV</string>
+
+    <!-- Navigation -->
+    <string name="tab_channels">Channels</string>
+    <string name="tab_favorites">Favorites</string>
+    <string name="tab_recents">Recent</string>
+    <string name="tab_playlists">Playlists</string>
+
+    <!-- Common actions -->
+    <string name="action_back">Back</string>
+    <string name="action_done">Done</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_close">Close</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_save">Save</string>
+    <string name="action_add">Add</string>
+    <string name="action_go">Go</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="action_share">Share</string>
+    <string name="action_expand">Expand</string>
+    <string name="action_collapse">Collapse</string>
+    <string name="add_favorite">Add favorite</string>
+    <string name="remove_favorite">Remove favorite</string>
+    <string name="play_pause">Play/Pause</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="stop">Stop</string>
+
+    <!-- Channels / Favorites / Recents -->
+    <string name="search_channels">Search channels</string>
+    <string name="search_include_hidden">Include hidden channels</string>
+    <string name="search_exclude_hidden">Exclude hidden channels</string>
+    <string name="group_all">All</string>
+    <string name="no_group">No group</string>
+    <string name="empty_channels_title">No channels yet</string>
+    <string name="empty_channels_body">Add a playlist from the Playlists tab to get started.</string>
+    <string name="no_matches_title">No matches</string>
+    <string name="no_matches_body">Try a different search term or group.</string>
+    <string name="empty_favorites_title">No favorites yet</string>
+    <string name="empty_favorites_body">Tap the heart on any channel to add it here.</string>
+    <string name="empty_recents_title">Nothing watched yet</string>
+    <string name="empty_recents_body">Channels you play will show up here.</string>
+
+    <!-- Player -->
+    <string name="player_pick_channel">Pick a channel to start watching</string>
+    <string name="player_stream_ended">This channel stopped transmitting.</string>
+    <string name="player_cant_play">Can\'t play this channel (%1$s). It may be offline.</string>
+    <string name="player_next_channel">Next channel</string>
+    <string name="player_previous_channel">Previous channel</string>
+    <string name="player_refresh_channel">Refresh channel</string>
+    <string name="player_now">Now · %1$s</string>
+    <string name="player_next">Next · %1$s  %2$s</string>
+    <string name="player_casting">Casting to TV</string>
+    <string name="player_show_list">Show channel list</string>
+    <string name="player_hide_list">Hide channel list</string>
+    <string name="player_full_screen">Full screen</string>
+    <string name="player_exit_full_screen">Exit full screen</string>
+    <string name="player_scaling_fit">Scaling: fit (tap for zoom)</string>
+    <string name="player_scaling_zoom">Scaling: zoom (tap for stretch)</string>
+    <string name="player_scaling_stretch">Scaling: stretch (tap for fit)</string>
+    <string name="tv_guide">TV guide</string>
+    <string name="no_guide">No guide available for this channel.</string>
+    <string name="audio_subtitles">Audio &amp; subtitles</string>
+    <string name="audio">Audio</string>
+    <string name="subtitles">Subtitles</string>
+    <string name="track_auto">Auto</string>
+    <string name="track_off">Off</string>
+    <string name="track_number">Track %1$d</string>
+    <string name="go_to_channel">Go to channel</string>
+    <string name="go_to_channel_number">Go to channel number</string>
+    <string name="channel_number">Channel number</string>
+
+    <!-- Playlists -->
+    <string name="add_url">Add URL</string>
+    <string name="import_file">Import file</string>
+    <string name="cast_hls_title">Cast in HLS</string>
+    <string name="cast_hls_summary">Casts each channel\'s .m3u8 version (needed for Chromecast); local playback is unchanged.</string>
+    <string name="empty_playlists_title">No playlists</string>
+    <string name="empty_playlists_body">Add an M3U URL or import an .m3u file to load your channels.</string>
+    <string name="delete_playlist_title">Delete playlist?</string>
+    <string name="delete_playlist_body">\"%1$s\" and its channels, favorites and guide will be removed.</string>
+    <string name="local_file">Local file</string>
+    <string name="guide_enabled">Guide enabled</string>
+    <string name="playlist_active">Active</string>
+    <string name="playlist_set_active">Set active</string>
+    <string name="edit_channels">Edit channels (show/hide)</string>
+    <string name="epg_guide">EPG / guide</string>
+    <string name="add_playlist_url">Add playlist URL</string>
+    <string name="name_optional">Name (optional)</string>
+    <string name="m3u_url">M3U URL</string>
+    <string name="epg_url_optional">EPG / XMLTV URL (optional, auto-detected)</string>
+    <string name="epg_for">EPG for %1$s</string>
+    <string name="epg_help">Channels are matched to the guide by tvg-id, or by name when they have none.</string>
+    <string name="epg_mode_playlist">From playlist</string>
+    <string name="epg_mode_custom">Custom URL</string>
+    <string name="epg_mode_off">Off</string>
+    <string name="epg_playlist_none">The playlist didn\'t name a guide at its last refresh.</string>
+    <string name="xmltv_url">XMLTV URL</string>
+    <string name="refresh_guide_now">Refresh guide now</string>
+    <string name="imported_playlist">Imported playlist</string>
+    <string name="default_playlist_name">Playlist</string>
+
+    <!-- Playlist editor -->
+    <string name="edit_playlist">Edit %1$s</string>
+    <plurals name="channels_visible">
+        <item quantity="one">%1$d of %2$d channel visible</item>
+        <item quantity="other">%1$d of %2$d channels visible</item>
+    </plurals>
+    <string name="empty_edit_title">No channels</string>
+    <string name="empty_edit_body">Refresh this playlist first, then edit it.</string>
+
+    <!-- Crash log -->
+    <string name="crash_log_title">The app crashed last time</string>
+    <string name="crash_log_body">Share the crash log to help find the cause.</string>
+    <string name="crash_log_subject">KaboomIPTV crash log</string>
+
+    <!-- Errors -->
+    <string name="error_generic">Something went wrong.</string>
+    <string name="error_no_channels_playlist">No channels found in that playlist.</string>
+    <string name="error_no_channels_file">No channels found in that file.</string>
+    <string name="error_empty_after_refresh">Playlist is empty after refresh.</string>
+    <string name="error_no_epg_url">This playlist has no EPG URL.</string>
+    <string name="error_server_http">Server returned HTTP %1$d</string>
+    <string name="error_epg_server_http">EPG server returned HTTP %1$d</string>
+    <string name="error_read_file">Could not read the selected file</string>
 </resources>

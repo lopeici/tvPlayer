@@ -24,19 +24,29 @@ val personalProperties = Properties().apply {
         FileInputStream(personalPropertiesFile).use { load(it) }
     }
 }
+// versionCode = number of commits on HEAD, so every build from a newer commit upgrades in place.
+// Falls back to 1 when git isn't installed (exec throws) or this isn't a repository (non-zero exit,
+// e.g. building from a source archive).
+val gitCommitCount: Int = runCatching {
+    providers.exec {
+        commandLine("git", "rev-list", "--count", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().toIntOrNull()
+}.getOrNull() ?: 1
+
 // Quote + escape a value for use as a BuildConfig String literal.
 fun buildConfigString(value: String): String =
     "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 android {
     namespace = "com.lopeici.tvplayer"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.lopeici.tvplayer"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        versionCode = gitCommitCount
         versionName = "1.0"
 
         // Default: no pre-loaded playlist. The `personal` flavor overrides these below.
@@ -80,7 +90,8 @@ android {
 
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -100,12 +111,16 @@ android {
         compose = true
         buildConfig = true
     }
+
+    lint {
+        // Media3's @UnstableApi is an androidx (lint-enforced) opt-in, not a Kotlin compiler one,
+        // so the module-wide opt-in for it has to live here.
+        disable += "UnsafeOptInUsageError"
+    }
 }
 
 kotlin {
     compilerOptions {
-        // Many Media3 APIs (ExoPlayer.Builder, CastPlayer, PlayerView, ...) are @UnstableApi.
-        optIn.add("androidx.media3.common.util.UnstableApi")
         optIn.add("androidx.compose.material3.ExperimentalMaterial3Api")
     }
 }
@@ -129,6 +144,7 @@ dependencies {
 
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.exoplayer.hls)
+    implementation(libs.androidx.media3.datasource.okhttp)
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.cast)
