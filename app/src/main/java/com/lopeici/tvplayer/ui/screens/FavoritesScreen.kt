@@ -7,7 +7,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lopeici.tvplayer.R
 import com.lopeici.tvplayer.data.Channel
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.ChannelRow
@@ -18,9 +20,10 @@ fun FavoritesScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
     val favoriteChannels by vm.favoriteChannels.collectAsStateWithLifecycle()
     val currentChannel by vm.currentChannel.collectAsStateWithLifecycle()
     val currentProgrammes by vm.currentProgrammes.collectAsStateWithLifecycle()
+    val now by vm.nowTick.collectAsStateWithLifecycle()
 
     if (favoriteChannels.isEmpty()) {
-        EmptyState("No favorites yet", "Tap the heart on any channel to add it here.")
+        EmptyState(stringResource(R.string.empty_favorites_title), stringResource(R.string.empty_favorites_body))
     } else {
         LazyColumn(Modifier.fillMaxSize()) {
             items(favoriteChannels, key = { it.key }) { channel ->
@@ -28,7 +31,8 @@ fun FavoritesScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
                     channel = channel,
                     isFavorite = true,
                     isPlaying = channel.key == currentChannel?.key,
-                    currentProgramme = channel.tvgId?.let { currentProgrammes[it] },
+                    currentProgramme = channel.epgKey?.let { currentProgrammes[it] },
+                    now = now,
                     onClick = { onPlay(channel, favoriteChannels) },
                     onToggleFavorite = { vm.toggleFavorite(channel) },
                 )

@@ -1,6 +1,8 @@
 package com.lopeici.tvplayer
 
 import android.app.Application
+import android.os.Build
+import com.lopeici.tvplayer.data.TvRepository
 import com.lopeici.tvplayer.di.AppContainer
 
 class TvPlayerApp : Application() {
@@ -22,8 +24,12 @@ class TvPlayerApp : Application() {
             runCatching {
                 val sw = java.io.StringWriter()
                 throwable.printStackTrace(java.io.PrintWriter(sw))
-                java.io.File(filesDir, "crash_log.txt")
-                    .writeText("Crashed on thread '${thread.name}':\n\n$sw")
+                val header = "KaboomIPTV ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}, " +
+                    "${BuildConfig.FLAVOR} ${BuildConfig.BUILD_TYPE}), Android ${Build.VERSION.RELEASE} " +
+                    "(API ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}\n" +
+                    "Time: ${java.time.Instant.now()}\n"
+                java.io.File(filesDir, TvRepository.CRASH_LOG_FILE)
+                    .writeText("${header}Crashed on thread '${thread.name}':\n\n$sw")
             }
             previous?.uncaughtException(thread, throwable)
         }

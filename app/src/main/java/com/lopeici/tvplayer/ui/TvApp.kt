@@ -1,6 +1,7 @@
 package com.lopeici.tvplayer.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
@@ -36,21 +37,22 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lopeici.tvplayer.R
 import com.lopeici.tvplayer.data.Channel
+import com.lopeici.tvplayer.ui.components.LocalIsTelevision
 import com.lopeici.tvplayer.ui.components.MiniPlayer
 import com.lopeici.tvplayer.ui.components.PlayerSurface
-import com.lopeici.tvplayer.ui.components.isTelevision
 import com.lopeici.tvplayer.ui.screens.ChannelsScreen
 import com.lopeici.tvplayer.ui.screens.FavoritesScreen
 import com.lopeici.tvplayer.ui.screens.PlayerContent
@@ -58,11 +60,11 @@ import com.lopeici.tvplayer.ui.screens.PlayerScreen
 import com.lopeici.tvplayer.ui.screens.PlaylistsScreen
 import com.lopeici.tvplayer.ui.screens.RecentsScreen
 
-private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
-    Channels("channels", "Channels", Icons.Filled.LiveTv),
-    Favorites("favorites", "Favorites", Icons.Filled.Favorite),
-    Recents("recents", "Recent", Icons.Filled.History),
-    Playlists("playlists", "Playlists", Icons.Filled.VideoLibrary),
+private enum class Tab(val route: String, @StringRes val label: Int, val icon: ImageVector) {
+    Channels("channels", R.string.tab_channels, Icons.Filled.LiveTv),
+    Favorites("favorites", R.string.tab_favorites, Icons.Filled.Favorite),
+    Recents("recents", R.string.tab_recents, Icons.Filled.History),
+    Playlists("playlists", R.string.tab_playlists, Icons.Filled.VideoLibrary),
 }
 
 private const val ROUTE_PLAYER = "player"
@@ -89,8 +91,7 @@ fun TvApp(vm: TvViewModel, isInPip: Boolean = false, onImportFile: () -> Unit) {
 /** Two-pane layout for unfolded foldables / tablets: rail + channel list + always-present player. */
 @Composable
 private fun WideLayout(vm: TvViewModel, onImportFile: () -> Unit) {
-    val context = LocalContext.current
-    val isTv = remember { context.isTelevision() }
+    val isTv = LocalIsTelevision.current
     var selected by remember { mutableStateOf(Tab.Channels) }
     var listVisible by remember { mutableStateOf(true) }
     var playerFullScreen by remember { mutableStateOf(false) }
@@ -107,7 +108,9 @@ private fun WideLayout(vm: TvViewModel, onImportFile: () -> Unit) {
     if (isTv) {
         val lifecycleOwner = LocalLifecycleOwner.current
         val recents by vm.recentChannels.collectAsStateWithLifecycle()
-        val visible by vm.visibleChannels.collectAsStateWithLifecycle()
+        // The full list (minus hidden), not the search/group-filtered one: a filter left over from
+        // the last session may exclude the channel being resumed, or match nothing at all.
+        val shown by vm.shownChannels.collectAsStateWithLifecycle()
         var resumeRequested by remember { mutableStateOf(false) }
         DisposableEffect(lifecycleOwner) {
             val observer = LifecycleEventObserver { _, event ->
@@ -119,15 +122,15 @@ private fun WideLayout(vm: TvViewModel, onImportFile: () -> Unit) {
             onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
         // Waits for the persisted recents + channel list to load on a cold start.
-        LaunchedEffect(resumeRequested, recents, visible) {
+        LaunchedEffect(resumeRequested, recents, shown) {
             if (!resumeRequested) return@LaunchedEffect
             if (vm.currentChannel.value != null) {
                 resumeRequested = false
                 return@LaunchedEffect
             }
-            if (recents.isNotEmpty() && visible.isNotEmpty()) {
+            if (recents.isNotEmpty() && shown.isNotEmpty()) {
                 resumeRequested = false
-                vm.play(recents.first(), visible)
+                vm.play(recents.first(), shown)
                 playerFullScreen = true
             }
         }
@@ -147,8 +150,8 @@ private fun WideLayout(vm: TvViewModel, onImportFile: () -> Unit) {
                 NavigationRailItem(
                     selected = selected == tab,
                     onClick = { selected = tab },
-                    icon = { Icon(tab.icon, contentDescription = tab.label) },
-                    label = { Text(tab.label) },
+                    icon = { Icon(tab.icon, contentDescription = stringResource(tab.label)) },
+                    label = { Text(stringResource(tab.label)) },
                 )
             }
         }
@@ -231,8 +234,8 @@ private fun CompactLayout(vm: TvViewModel, onImportFile: () -> Unit) {
                                         restoreState = true
                                     }
                                 },
-                                icon = { Icon(tab.icon, contentDescription = tab.label) },
-                                label = { Text(tab.label) },
+                                icon = { Icon(tab.icon, contentDescription = stringResource(tab.label)) },
+                                label = { Text(stringResource(tab.label)) },
                             )
                         }
                     }

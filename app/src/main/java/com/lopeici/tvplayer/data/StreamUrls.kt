@@ -22,3 +22,13 @@ fun hlsVariant(url: String): String {
     val newBase = if (slash >= 0) base.substring(0, slash + 1) + newSeg else newSeg
     return newBase + query
 }
+
+/**
+ * [url] without a Kodi-style `|Header=…` suffix when that stripped form is one of [current] —
+ * older versions kept the suffix in `Channel.url`, so keys saved by them need re-pointing.
+ * Anything else is returned unchanged.
+ */
+fun migratedUrl(url: String, current: Set<String>): String {
+    val stripped = url.substringBefore('|').trim()
+    return if (stripped != url && stripped in current) stripped else url
+}

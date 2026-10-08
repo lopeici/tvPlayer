@@ -20,8 +20,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lopeici.tvplayer.R
 import com.lopeici.tvplayer.data.Channel
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.CenterProgress
@@ -40,6 +42,7 @@ fun ChannelsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
     val loading by vm.loading.collectAsStateWithLifecycle()
     val currentChannel by vm.currentChannel.collectAsStateWithLifecycle()
     val currentProgrammes by vm.currentProgrammes.collectAsStateWithLifecycle()
+    val now by vm.nowTick.collectAsStateWithLifecycle()
     val searchHidden by vm.searchHidden.collectAsStateWithLifecycle()
     val hidden by vm.hidden.collectAsStateWithLifecycle()
 
@@ -47,14 +50,14 @@ fun ChannelsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
         SearchTextField(
             value = query,
             onValueChange = vm::setSearch,
-            placeholder = "Search channels",
+            placeholder = stringResource(R.string.search_channels),
             // While searching, an eye toggle includes user-hidden channels in the results.
             trailingIcon = if (query.isBlank()) null else {
                 {
                     IconButton(onClick = { vm.setSearchHidden(!searchHidden) }) {
                         Icon(
                             if (searchHidden) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                            contentDescription = if (searchHidden) "Exclude hidden channels" else "Include hidden channels",
+                            contentDescription = stringResource(if (searchHidden) R.string.search_exclude_hidden else R.string.search_include_hidden),
                             tint = if (searchHidden) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -73,7 +76,7 @@ fun ChannelsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
                     FilterChip(
                         selected = selectedGroup == null,
                         onClick = { vm.setGroup(null) },
-                        label = { Text("All") },
+                        label = { Text(stringResource(R.string.group_all)) },
                         modifier = Modifier.padding(end = 8.dp),
                     )
                 }
@@ -90,15 +93,16 @@ fun ChannelsScreen(vm: TvViewModel, onPlay: (Channel, List<Channel>) -> Unit) {
 
         when {
             loading && all.isEmpty() -> CenterProgress()
-            all.isEmpty() -> EmptyState("No channels yet", "Add a playlist from the Playlists tab to get started.")
-            visible.isEmpty() -> EmptyState("No matches", "Try a different search term or group.")
+            all.isEmpty() -> EmptyState(stringResource(R.string.empty_channels_title), stringResource(R.string.empty_channels_body))
+            visible.isEmpty() -> EmptyState(stringResource(R.string.no_matches_title), stringResource(R.string.no_matches_body))
             else -> LazyColumn(Modifier.fillMaxSize()) {
                 items(visible, key = { it.key }) { channel ->
                     ChannelRow(
                         channel = channel,
                         isFavorite = channel.key in favorites,
                         isPlaying = channel.key == currentChannel?.key,
-                        currentProgramme = channel.tvgId?.let { currentProgrammes[it] },
+                        currentProgramme = channel.epgKey?.let { currentProgrammes[it] },
+                        now = now,
                         onClick = { onPlay(channel, visible) },
                         onToggleFavorite = { vm.toggleFavorite(channel) },
                         dimmed = hidden[channel.playlistId]?.isHidden(channel) == true,

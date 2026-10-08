@@ -24,9 +24,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.lopeici.tvplayer.R
 import com.lopeici.tvplayer.data.Channel
 import com.lopeici.tvplayer.data.Programme
 
@@ -39,6 +41,8 @@ fun ChannelRow(
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier,
     currentProgramme: Programme? = null,
+    /** Clock for the programme progress bar — pass a ticking value so the bar keeps moving. */
+    now: Long = 0L,
     dimmed: Boolean = false,
 ) {
     val subtitle = currentProgramme?.title ?: channel.group
@@ -62,7 +66,7 @@ fun ChannelRow(
                     Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                     if (currentProgramme != null) {
                         LinearProgressIndicator(
-                            progress = { currentProgramme.progress(System.currentTimeMillis()) },
+                            progress = { currentProgramme.progress(now) },
                             modifier = Modifier.fillMaxWidth().padding(top = 4.dp, end = 8.dp).height(3.dp),
                         )
                     }
@@ -74,7 +78,7 @@ fun ChannelRow(
             IconButton(onClick = onToggleFavorite) {
                 Icon(
                     imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    contentDescription = if (isFavorite) "Remove favorite" else "Add favorite",
+                    contentDescription = stringResource(if (isFavorite) R.string.remove_favorite else R.string.add_favorite),
                     tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

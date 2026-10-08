@@ -12,16 +12,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuOpen
@@ -65,6 +68,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -72,31 +76,28 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.ui.AspectRatioFrameLayout
-import java.util.Locale
+import com.lopeici.tvplayer.R
 import com.lopeici.tvplayer.ui.TvViewModel
 import com.lopeici.tvplayer.ui.components.CastButton
-import com.lopeici.tvplayer.ui.components.isTelevision
+import com.lopeici.tvplayer.ui.components.LocalIsTelevision
 import com.lopeici.tvplayer.ui.components.PlayerSurface
 import com.lopeici.tvplayer.ui.components.findActivity
 import com.lopeici.tvplayer.ui.components.formatClock
 import com.lopeici.tvplayer.ui.components.timeRange
+import java.util.Locale
 import kotlinx.coroutines.delay
 
 /** Full-screen player route (compact / folded layout). */
@@ -139,8 +140,7 @@ fun PlayerContent(
     val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
     val scrim = Color.Black.copy(alpha = 0.45f)
 
-    val context = LocalContext.current
-    val isTv = remember { context.isTelevision() }
+    val isTv = LocalIsTelevision.current
     val interaction = remember { MutableInteractionSource() }
     val playFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
@@ -182,7 +182,7 @@ fun PlayerContent(
     if (!fullScreen && current == null) {
         Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
             Text(
-                "Pick a channel to start watching",
+                stringResource(R.string.player_pick_channel),
                 color = Color.White.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.bodyLarge,
             )
@@ -260,10 +260,10 @@ fun PlayerContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(error ?: "This channel stopped transmitting.", color = Color.White)
+                Text(error ?: stringResource(R.string.player_stream_ended), color = Color.White)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { vm.retry() }) { Text("Refresh") }
-                    TextButton(onClick = { vm.zapNext() }) { Text("Next channel") }
+                    TextButton(onClick = { vm.retry() }) { Text(stringResource(R.string.action_refresh)) }
+                    TextButton(onClick = { vm.zapNext() }) { Text(stringResource(R.string.player_next_channel)) }
                 }
             }
         }
@@ -287,7 +287,7 @@ fun PlayerContent(
             ) {
                 if (onBack != null) {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back), tint = Color.White)
                     }
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
@@ -300,7 +300,7 @@ fun PlayerContent(
                     )
                     nowProg?.let {
                         Text(
-                            "Now · ${it.title}",
+                            stringResource(R.string.player_now, it.title),
                             color = Color.White.copy(alpha = 0.85f),
                             style = MaterialTheme.typography.labelMedium,
                             maxLines = 1,
@@ -309,7 +309,7 @@ fun PlayerContent(
                     }
                     nextProg?.let {
                         Text(
-                            "Next · ${formatClock(it.start)}  ${it.title}",
+                            stringResource(R.string.player_next, formatClock(it.start), it.title),
                             color = Color.White.copy(alpha = 0.6f),
                             style = MaterialTheme.typography.labelSmall,
                             maxLines = 1,
@@ -317,14 +317,14 @@ fun PlayerContent(
                         )
                     }
                     if (isCasting) {
-                        Text("Casting to TV", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                        Text(stringResource(R.string.player_casting), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
                     }
                 }
                 if (onToggleList != null) {
                     IconButton(onClick = onToggleList) {
                         Icon(
                             if (listVisible) Icons.AutoMirrored.Filled.MenuOpen else Icons.Filled.Menu,
-                            contentDescription = if (listVisible) "Hide channel list" else "Show channel list",
+                            contentDescription = stringResource(if (listVisible) R.string.player_hide_list else R.string.player_show_list),
                             tint = Color.White,
                         )
                     }
@@ -333,7 +333,7 @@ fun PlayerContent(
                     IconButton(onClick = onToggleFullScreen, modifier = Modifier.tvFocusHighlight()) {
                         Icon(
                             if (fullScreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-                            contentDescription = if (fullScreen) "Exit full screen" else "Full screen",
+                            contentDescription = stringResource(if (fullScreen) R.string.player_exit_full_screen else R.string.player_full_screen),
                             tint = Color.White,
                         )
                     }
@@ -353,7 +353,7 @@ fun PlayerContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = { vm.zapPrevious() }, modifier = Modifier.tvFocusHighlight()) {
-                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous channel", tint = Color.White)
+                    Icon(Icons.Filled.SkipPrevious, contentDescription = stringResource(R.string.player_previous_channel), tint = Color.White)
                 }
                 IconButton(
                     onClick = { vm.togglePlayPause() },
@@ -361,7 +361,7 @@ fun PlayerContent(
                 ) {
                     Icon(
                         if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = "Play/Pause",
+                        contentDescription = stringResource(R.string.play_pause),
                         tint = Color.White,
                     )
                 }
@@ -374,13 +374,13 @@ fun PlayerContent(
                     },
                     modifier = Modifier.tvFocusHighlight(),
                 ) {
-                    Icon(Icons.Filled.Stop, contentDescription = "Stop", tint = Color.White)
+                    Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.stop), tint = Color.White)
                 }
                 IconButton(onClick = { vm.zapNext() }, modifier = Modifier.tvFocusHighlight()) {
-                    Icon(Icons.Filled.SkipNext, contentDescription = "Next channel", tint = Color.White)
+                    Icon(Icons.Filled.SkipNext, contentDescription = stringResource(R.string.player_next_channel), tint = Color.White)
                 }
                 IconButton(onClick = { vm.retry() }, modifier = Modifier.tvFocusHighlight()) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Refresh channel", tint = Color.White)
+                    Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.player_refresh_channel), tint = Color.White)
                 }
                 IconButton(
                     onClick = { current?.let { vm.toggleFavorite(it) } },
@@ -389,24 +389,26 @@ fun PlayerContent(
                     val isFav = current?.key?.let { it in favorites } == true
                     Icon(
                         if (isFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                        contentDescription = if (isFav) "Remove favorite" else "Add favorite",
+                        contentDescription = stringResource(if (isFav) R.string.remove_favorite else R.string.add_favorite),
                         tint = if (isFav) MaterialTheme.colorScheme.primary else Color.White,
                     )
                 }
                 // Only offered when there is something to choose (several audio tracks or subtitles).
                 if (audioGroups.sumOf { it.length } > 1 || textGroups.isNotEmpty()) {
                     IconButton(onClick = { showTracks = true }, modifier = Modifier.tvFocusHighlight()) {
-                        Icon(Icons.Filled.Subtitles, contentDescription = "Audio & subtitles", tint = Color.White)
+                        Icon(Icons.Filled.Subtitles, contentDescription = stringResource(R.string.audio_subtitles), tint = Color.White)
                     }
                 }
                 IconButton(onClick = { vm.cycleResizeMode() }, modifier = Modifier.tvFocusHighlight()) {
                     Icon(
                         Icons.Filled.AspectRatio,
-                        contentDescription = when (resizeMode) {
-                            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Scaling: zoom (tap for stretch)"
-                            AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Scaling: stretch (tap for fit)"
-                            else -> "Scaling: fit (tap for zoom)"
-                        },
+                        contentDescription = stringResource(
+                            when (resizeMode) {
+                                AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> R.string.player_scaling_zoom
+                                AspectRatioFrameLayout.RESIZE_MODE_FILL -> R.string.player_scaling_stretch
+                                else -> R.string.player_scaling_fit
+                            },
+                        ),
                         tint = if (resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
                             Color.White
                         } else {
@@ -415,10 +417,10 @@ fun PlayerContent(
                     )
                 }
                 IconButton(onClick = { showGuide = true }, modifier = Modifier.tvFocusHighlight()) {
-                    Icon(Icons.Filled.Schedule, contentDescription = "TV guide", tint = Color.White)
+                    Icon(Icons.Filled.Schedule, contentDescription = stringResource(R.string.tv_guide), tint = Color.White)
                 }
                 IconButton(onClick = { showJump = true }, modifier = Modifier.tvFocusHighlight()) {
-                    Icon(Icons.Filled.Dialpad, contentDescription = "Go to channel number", tint = Color.White)
+                    Icon(Icons.Filled.Dialpad, contentDescription = stringResource(R.string.go_to_channel_number), tint = Color.White)
                 }
             }
             }
@@ -444,16 +446,16 @@ fun PlayerContent(
     }
 
     if (showGuide) {
-        val schedule = remember(current?.key) { vm.scheduleFor(current?.tvgId) }
+        val schedule = remember(current?.key) { vm.scheduleFor(current?.epgKey) }
         ModalBottomSheet(onDismissRequest = { showGuide = false }) {
             Text(
-                text = current?.name ?: "TV guide",
+                text = current?.name ?: stringResource(R.string.tv_guide),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
             if (schedule.isEmpty()) {
                 Text(
-                    "No guide available for this channel.",
+                    stringResource(R.string.no_guide),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp),
@@ -501,21 +503,21 @@ private fun TrackSelectionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Audio & subtitles") },
+        title = { Text(stringResource(R.string.audio_subtitles)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 if (audioGroups.isNotEmpty()) {
                     Text(
-                        "Audio",
+                        stringResource(R.string.audio),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(vertical = 4.dp),
                     )
-                    TrackRow("Auto", selected = false) { onAutoAudio(); onDismiss() }
+                    TrackRow(stringResource(R.string.track_auto), selected = false) { onAutoAudio(); onDismiss() }
                     audioGroups.forEach { group ->
                         for (i in 0 until group.length) {
                             if (!group.isTrackSupported(i)) continue
-                            TrackRow(group.getTrackFormat(i).trackLabel(i), group.isTrackSelected(i)) {
+                            TrackRow(group.getTrackFormat(i).trackLabel(stringResource(R.string.track_number, i + 1)), group.isTrackSelected(i)) {
                                 onSelectTrack(group, i); onDismiss()
                             }
                         }
@@ -523,17 +525,17 @@ private fun TrackSelectionDialog(
                 }
                 if (textGroups.isNotEmpty()) {
                     Text(
-                        "Subtitles",
+                        stringResource(R.string.subtitles),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(vertical = 4.dp),
                     )
                     val anyTextSelected = textGroups.any { g -> (0 until g.length).any { g.isTrackSelected(it) } }
-                    TrackRow("Off", selected = !anyTextSelected) { onSubtitlesOff(); onDismiss() }
+                    TrackRow(stringResource(R.string.track_off), selected = !anyTextSelected) { onSubtitlesOff(); onDismiss() }
                     textGroups.forEach { group ->
                         for (i in 0 until group.length) {
                             if (!group.isTrackSupported(i)) continue
-                            TrackRow(group.getTrackFormat(i).trackLabel(i), group.isTrackSelected(i)) {
+                            TrackRow(group.getTrackFormat(i).trackLabel(stringResource(R.string.track_number, i + 1)), group.isTrackSelected(i)) {
                                 onSelectTrack(group, i); onDismiss()
                             }
                         }
@@ -541,7 +543,7 @@ private fun TrackSelectionDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
     )
 }
 
@@ -557,14 +559,14 @@ private fun TrackRow(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 /** Human-readable track name: explicit label, else the language name, else a numbered fallback. */
-private fun Format.trackLabel(index: Int): String {
+private fun Format.trackLabel(fallback: String): String {
     label?.takeIf { it.isNotBlank() }?.let { return it }
     language?.takeIf { it.isNotBlank() && it != C.LANGUAGE_UNDETERMINED }?.let { lang ->
         val display = Locale.forLanguageTag(lang).displayLanguage
         if (display.isNotBlank()) return display.replaceFirstChar { it.uppercase() }
         return lang
     }
-    return "Track ${index + 1}"
+    return fallback
 }
 
 @Composable
@@ -572,12 +574,12 @@ private fun ChannelNumberDialog(onConfirm: (Int) -> Unit, onDismiss: () -> Unit)
     var text by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Go to channel") },
+        title = { Text(stringResource(R.string.go_to_channel)) },
         text = {
             OutlinedTextField(
                 value = text,
                 onValueChange = { input -> text = input.filter { it.isDigit() }.take(5) },
-                label = { Text("Channel number") },
+                label = { Text(stringResource(R.string.channel_number)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
@@ -586,9 +588,9 @@ private fun ChannelNumberDialog(onConfirm: (Int) -> Unit, onDismiss: () -> Unit)
             TextButton(
                 onClick = { text.toIntOrNull()?.let(onConfirm) },
                 enabled = text.toIntOrNull() != null,
-            ) { Text("Go") }
+            ) { Text(stringResource(R.string.action_go)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
 
